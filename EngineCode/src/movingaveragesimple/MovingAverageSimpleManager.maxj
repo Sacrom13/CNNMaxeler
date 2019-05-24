@@ -515,11 +515,13 @@ class MovingAverageSimpleManager extends CustomManager
 			    	switch(Layers[i])
 			    	{
 			    			case Conv:
-										WeightDims += 2 * Dims[i][0] * Params[i][2] * Params[i][2];
+										if((2 * Dims[i][0] * Params[i][2] * Params[i][2]) > WeightDims)
+										{
+											WeightDims = (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
+										}
 					    				break;
 
 			    			case Pool :
-										WeightDims += (BurstSizeDataType * BurstMult) * Params[i][1]*Params[i][1];
 					    				break;
 
 			    			case Fcon:

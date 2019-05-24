@@ -17,6 +17,24 @@
 //                  2 -  Main				                  //
 // ---------------------------------------------------------- //
 
+void CreateTestNetwork(Network* Net, int* InDims)
+{
+	InitCNN(Net, InDims);
+	AddBlock(Net);
+	AddConv(16, 3, 2, 2, 2);
+	AddActi(ReLu);
+	AddConv(16, 3, 1, 1, 4);
+	AddActi(ReLu);
+	AddPool(2, MaxPool, 2, 1);
+
+	AddBlock(Net);
+	AddFcon(100, 1);
+	AddActi(ReLu);
+	AddFcon(100, 1);
+	AddActi(Soft);
+
+	SetBurstMult(Net, 0, 4);
+}
 
 int main()
 {
@@ -25,23 +43,12 @@ int main()
 	Network* Net = malloc(sizeof(Network));
 
 	printf("Setting Network\n");
-	int InDims[3] = {8, 30, 30};
+	int InDims[3] = {3, 224, 224};
 
-	InitCNN(Net, InDims);
-	AddBlock(Net);
-	AddConv(16, 3, 1, 2, 2);
-	AddActi(ReLu);
-	/*AddConv(16, 3, 1, 1, 4);
-	AddActi(ReLu);
-	AddPool(2, MaxPool, 1, 1);*/
+	CreateVGG16(Net);
+	//CreateTestNetwork(Net, InDims);
 
-	AddBlock(Net);
-	AddFcon(100, 1);
-	AddActi(ReLu);
-	AddFcon(100, 1);
-	AddActi(Soft);
-
-	SetBurstMult(Net, 0, 16);
+	SetBurstMult(Net, 0, 512);
 
 	double*** Input = Init3D(InDims);
 	RandomizeArray3D(Input, InDims, 0, 5);

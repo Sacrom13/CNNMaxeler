@@ -230,9 +230,10 @@ class MovingAverageSimpleKernel extends Kernel
 
 					// Helper Variables to avoid doing same computation more than once
 					int PaddedInDims = (int) (InDims[1] + 2*Params[4]);
+					int DFEStride = Params[3] > 1 ? (int) Params[3] : 2;
 
 					// --------------------------------------------- //
-					// ---------- Counters + Output Control ---------//
+					// ----------  Input Position Counters	---------//
 					// --------------------------------------------- //
 
 					// Input Padding ( LMem )		( Using Tick Count works since at most we only go through the Padding Zone Once!)
@@ -266,29 +267,6 @@ class MovingAverageSimpleKernel extends Kernel
 					Counter KCounter = control.count.makeCounter(KParams);
 					DFEVar KTicks = KCounter.getCount().cast(dfeUInt(16));
 
-					// Check if Output Point or not
-					DFEVar IsOutputPoint = (CTicks.eq((InDims[0]/Parallelism) - 1) &				// If we are in last Computation Channel for a given Kernel
-											YTicks < OutDims[1] &									// If we are in correct Y position to Output
-											XTicks < OutDims[1] );									// If we are in correct X position to Output
-
-					// Output Points														2x Output size because of transitions
-					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(2 * OutDims[1] * OutDims[1] + 1))
-					.withEnable((Enable > 0) &
-								(IsOutputPoint |
-								(CTicks.eq((InDims[0]/Parallelism) - 2) &
-								YTicks.eq(PaddedInDims - 1) &
-								XTicks.eq(PaddedInDims - 1))));
-					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
-					DFEVar OutPointTicks = OutPointCounter.getCount().cast(dfeUInt(32));
-
-					DFEVar DataOutEnable =  (Enable > 0) &																													// If Layer is Active
-											(( (IsOutputPoint > 0) & (OutPointTicks > FirstOutput) & (OutPointTicks < FirstOutput + 2 + BurstSizeDataType*BurstMult) ) | 	// Regular Output Point
-					 						(TickCount > PadEnable));																										// Padding
-
-
-					//debug.simPrintf("TickCount = %d, Kernel = %d, Cticks = %d, Y = %d, X = %d, OutPointTicks = %d\n", TickCount, KTicks , CTicks, YTicks, XTicks, OutPointTicks);
-					debug.simPrintf("TickCount = %d, OutPointTicks = %d\n", TickCount, OutPointTicks);
-
 					// --------------------------------------------- //
 					// ---------- 		Input Control		---------//
 					// --------------------------------------------- //
@@ -300,6 +278,40 @@ class MovingAverageSimpleKernel extends Kernel
 
 					DFEVar Input = InPaddingZone ? 0 : MemInput;
 
+					// --------------------------------------------- //
+					// ---------- 		Output Control		---------//
+					// --------------------------------------------- //
+
+					// X
+					Count.Params XStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & NotInputPadding & XTicks < PaddedInDims - Params[2]);
+					Counter XStrideCounter = control.count.makeCounter(XStrideParams);
+					DFEVar XStrideTicks = XStrideCounter.getCount().cast(dfeUInt(16));
+
+					// Y
+					Count.Params YStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & XTicks.eq(PaddedInDims - 1) & NotInputPadding & YTicks < PaddedInDims - Params[2]);
+					Counter YStrideCounter = control.count.makeCounter(YStrideParams);
+					DFEVar YStrideTicks = YStrideCounter.getCount().cast(dfeUInt(16));
+
+					// Check if Output Point or not
+					DFEVar IsOutputPoint = (Params[3] > 1 ? XStrideTicks.eq(0) & YStrideTicks.eq(0) : constant.var(1)) &	// Stride Control
+										   (CTicks.eq((InDims[0]/Parallelism) - 1) &										// If we are in last Computation Channel for a given Kernel
+										    YTicks < PaddedInDims - Params[2] + 1 &											// If we are in correct Y position to Output
+											XTicks < PaddedInDims - Params[2] + 1 );										// If we are in correct X position to Output
+
+					// Output Points														2x Output size because of transitions
+					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(2 * OutDims[1] * OutDims[1] + 1))
+					.withInitValue(1)
+					.withEnable((Enable > 0) & (IsOutputPoint));
+					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
+					DFEVar OutPointTicks = OutPointCounter.getCount().cast(dfeUInt(32));
+
+					DFEVar DataOutEnable =  (Enable > 0) &																													// If Layer is Active
+											(( (IsOutputPoint) & (OutPointTicks > FirstOutput) & (OutPointTicks < FirstOutput + 2 + BurstSizeDataType*BurstMult) ) | 		// Regular Output Point
+					 						(TickCount > PadEnable));																										// Padding
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -395,8 +407,11 @@ class MovingAverageSimpleKernel extends Kernel
 					[3] = Stride;
 					*/
 
+					// Helper Variables to avoid doing same computation more than once
+					int DFEStride = Params[3] > 1 ? (int) Params[3] : 2;
+
 					// --------------------------------------------- //
-					// ---------- Counters + Output Control ---------//
+					// ----------  Input Position Counters	---------//
 					// --------------------------------------------- //
 
 					// X
@@ -413,25 +428,48 @@ class MovingAverageSimpleKernel extends Kernel
 					Counter YCounter = control.count.makeCounter(YParams);
 					DFEVar YTicks = YCounter.getCount().cast(dfeUInt(16));
 
+					// --------------------------------------------- //
+					// ---------- 		Input Control		-------- //
+					// --------------------------------------------- //
+
+					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0);
+
+					// --------------------------------------------- //
+					// ---------- 		Output Control		-------- //
+					// --------------------------------------------- //
+
+					// X
+					Count.Params XStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & XTicks < InDims[1] - Params[1]);
+					Counter XStrideCounter = control.count.makeCounter(XStrideParams);
+					DFEVar XStrideTicks = XStrideCounter.getCount().cast(dfeUInt(16));
+
+					// Y
+					Count.Params YStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & XTicks.eq(InDims[1] - 1) & YTicks < InDims[1] - Params[1]);
+					Counter YStrideCounter = control.count.makeCounter(YStrideParams);
+					DFEVar YStrideTicks = YStrideCounter.getCount().cast(dfeUInt(16));
+
 					// Check if Output Point or not
-					DFEVar IsOutputPoint = (YTicks < OutDims[1] &							// If we are in correct Y position to Output
-											XTicks < OutDims[1]);							// If we are in correct X position to Output
+					DFEVar IsOutputPoint = 	(Params[3] > 1 ? XStrideTicks.eq(0) & YStrideTicks.eq(0) : constant.var(1)) &		// Stride Control
+											(YTicks < InDims[1] - Params[1] + 1 &												// If we are in correct Y position to Output
+											XTicks < InDims[1] - Params[1] + 1);												// If we are in correct X position to Output
 
 					// Output Points
 					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(OutDims[0] * OutDims[1] * OutDims[1] + BurstMult*BurstSizeDataType))
+					.withInitValue(1)
 					.withEnable(Enable > 0 & IsOutputPoint);
 					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
 					DFEVar OutPointTicks = OutPointCounter.getCount().cast(dfeUInt(32));
 
-					DFEVar DataOutEnable =  (Enable > 0) &																												// If Layer is Active
-											(( (OutPointTicks >= FirstOutput) & (OutPointTicks < FirstOutput + BurstMult*BurstSizeDataType) & (IsOutputPoint > 0) ) | 	// Regular Output Point
-											(TickCount > PadEnable));									 																// Padding
+					DFEVar DataOutEnable =  (Enable > 0) &																													// If Layer is Active
+											(( (IsOutputPoint) & (OutPointTicks > FirstOutput) & (OutPointTicks < FirstOutput + 2 + BurstSizeDataType*BurstMult) ) | 		// Regular Output Point
+											(TickCount > PadEnable));																										// Padding
 
-					// --------------------------------------------- //
-					// ---------- 		Input Control		---------//
-					// --------------------------------------------- //
+					//debug.simPrintf(Enable > 0, "X, XStride = %d, %d\tY, YStride = %d, %d\n", XTicks, XStrideTicks, YTicks, YStrideTicks);
 
-					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0);
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -585,7 +623,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// --------------------------------------------- //
 
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
-					
+
 				}
 
 			// 3.2.2 --- Backward --- //
@@ -610,14 +648,13 @@ class MovingAverageSimpleKernel extends Kernel
 					 [0] = ActFunc
 					 [1] = DropP
 					 */
-					 
+
 					// --------------------------------------------- //
 					// ---------- 			Counters 		---------//
 					// --------------------------------------------- //
 
 					// Output
-					Count.Params OutputParams = control.count.makeParams(MathUtils.bitsToAddress(BurstSizeDataType * BurstMult)
-					.withMax(BurstSizeDataType * BurstMult)
+					Count.Params OutputParams = control.count.makeParams(MathUtils.bitsToAddress(BurstSizeDataType * BurstMult))
 					.withEnable(Enable > 0);
 					Counter OutputCounter = control.count.makeCounter(OutputParams);
 					DFEVar OutputTicks = OutputCounter.getCount().cast(dfeUInt(16));
@@ -627,41 +664,39 @@ class MovingAverageSimpleKernel extends Kernel
 					.withEnable(Enable > 0 & OutputTicks.eq(InDims[1] - 1));
 					Counter InputCounter = control.count.makeCounter(InputParams);
 					DFEVar InputTicks = InputCounter.getCount().cast(dfeUInt(16));
-					
+
 					// --------------------------------------------- //
 					// ---------- 		Input Control		---------//
 					// --------------------------------------------- //
-					
+
 					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutputTicks.eq(0));
-					
+
 					// --------------------------------------------- //
 					// ---------- 		Output Control		---------//
 					// --------------------------------------------- //
-					
-					DFEVar DataOutEnable = ( (Enable > 0) & 
-										   ( (InputTicks.eq(InDims[1]/Parallelism - 1)) | 
+
+					DFEVar DataOutEnable = ( (Enable > 0) &
+										   ( (InputTicks.eq(InDims[1]/Parallelism - 1)) |
 										   TickCount > PadEnable));
-										   
+
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
 					// --------------------------------------------- //
-					
+
 					DFEVar Output = constant.var(0);
-					
+
 					int Offset = BurstSizeDataType * BurstMult * InDims[1] / Parallelism;
 					for(int CurIn = 0; CurIn < Parallelism; ++CurIn)
 					{
-					
+
 					}
-					
-					
+
+
 					// --------------------------------------------- //
 					// ---------- 		Output		       ----------//
 					// --------------------------------------------- //
-					
-					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);.
 
-					
+					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
 				}
 
 			// 3.2.2 --- Backward --- //

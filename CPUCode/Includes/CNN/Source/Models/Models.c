@@ -475,9 +475,7 @@
 										}
 
 										// Enables + Weights
-										//Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = (2 * pow(Net->Blocks[Block].Dims[Layer][1] + 2*Net->Blocks[Block].LayerParams[Layer][4], 2) * Net->Blocks[Block].Dims[Layer][0]) + Net->Blocks[Block].FParams.BurstMult * BurstSizeDataType;
-
-										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = pow(Net->Blocks[Block].Dims[Layer][1] + 2*Net->Blocks[Block].LayerParams[Layer][4], 2) * Net->Blocks[Block].Dims[Layer][0];
+										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
 
 										for(int Kernel = 0; Kernel < 2; ++Kernel)
 										{
@@ -502,15 +500,8 @@
 										}
 										if((int)Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] + OutputSize > Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
 										{
-											Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] *= 2;
-											/*if((Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][1]) % OutputSize != 0)
-											{
-												Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] += OutputSize - (Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][1]) % OutputSize;
-											}*/
-
 											CurrentKernel++;
 										}
-
 
 										// Mem Control
 										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = CurrentCall - LayerCalls[Layer][0];
@@ -519,15 +510,11 @@
 										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
 
 										// Ticks
-										if(Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] > Net->Blocks[Block].FParams.Ticks[CurrentCall])
-										{
-											Net->Blocks[Block].FParams.Ticks[CurrentCall] = Net->Blocks[Block].FParams.Enables[CurrentCall][Layer];
-										}
+										Net->Blocks[Block].FParams.Ticks[CurrentCall] = UINT32_MAX;
 									}
+
 									// Set LMemPadding only on last iteration
-									Net->Blocks[Block].FParams.PadEnables[LayerCalls[Layer][1] - 1][Layer] = Net->Blocks[Block].FParams.Enables[LayerCalls[Layer][1] - 1][Layer];
-									Net->Blocks[Block].FParams.Enables[LayerCalls[Layer][1] - 1][Layer] += (Net->Blocks[Block].FParams.BurstMult * BurstSizeDataType);
-									Net->Blocks[Block].FParams.Ticks[LayerCalls[Layer][1] - 1] += (Net->Blocks[Block].FParams.BurstMult * BurstSizeDataType);
+									Net->Blocks[Block].FParams.PadEnables[LayerCalls[Layer][1] - 1][Layer] = 2 * (pow(Net->Blocks[Block].Dims[Layer][1] + 2*Net->Blocks[Block].LayerParams[Layer][4], 2) * Net->Blocks[Block].Dims[Layer][0] + BurstSizeDataType*BM);
 
 									break;
 						case Pool:
@@ -546,7 +533,7 @@
 										}
 
 										// Enables
-										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = (Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2]) + Net->Blocks[Block].FParams.BurstMult * BurstSizeDataType;
+										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
 
 										// Mem Control
 										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = CurrentCall - LayerCalls[Layer][0];
@@ -555,18 +542,11 @@
 										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
 
 										// Ticks
-										if(Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] > Net->Blocks[Block].FParams.Ticks[CurrentCall])
-										{
-											Net->Blocks[Block].FParams.Ticks[CurrentCall] = Net->Blocks[Block].FParams.Enables[CurrentCall][Layer];
-										}
+										Net->Blocks[Block].FParams.Ticks[CurrentCall] = UINT32_MAX;
 									}
 
 									// Set LMemPadding only on last iteration
-									Net->Blocks[Block].FParams.PadEnables[LayerCalls[Layer][1] - 1][Layer] = Net->Blocks[Block].FParams.Enables[LayerCalls[Layer][1] - 1][Layer];
-									Net->Blocks[Block].FParams.Enables[LayerCalls[Layer][1] - 1][Layer] += (Net->Blocks[Block].FParams.BurstMult * BurstSizeDataType);
-									Net->Blocks[Block].FParams.Ticks[LayerCalls[Layer][1] - 1] += (Net->Blocks[Block].FParams.BurstMult * BurstSizeDataType);
-
-
+									Net->Blocks[Block].FParams.PadEnables[LayerCalls[Layer][1] - 1][Layer] = Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][1];
 									break;
 
 						case Fcon:

@@ -1,7 +1,7 @@
 .PHONY: clean
 
 CC=gcc
-CFLAGS=-g -lm -lc -std=c99 -Wall -I.
+CFLAGS=-g -lm -lc -std=c99 -Wextra -I.
 DEPS = CPUCode/Includes/CNN/CNN.h
 OBJ = CPUCode/Main/MovingAverageSimpleCpuCode.c \
 	\
