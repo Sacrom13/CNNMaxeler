@@ -1,0 +1,1 @@
+CPUCode/Includes/CNN/Source/DataSets/MNIST/*.csv filter=lfs diff=lfs merge=lfs -text
