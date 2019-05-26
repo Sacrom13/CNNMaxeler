@@ -328,12 +328,12 @@ class MovingAverageSimpleManager extends CustomManager
 
 						// Setup Inputs and Outputs for each Layers
 
-							TotalMemSize = (Dims[Layer][0] * Dims[Layer][1] * Dims[Layer][1]) + Padding[Layer];
-							TotalMemSize *= DataType.sizeInBytes();
-
 							switch(Layers[Layer])
 							{
 								case Conv:
+											TotalMemSize = (Dims[Layer][0] * Dims[Layer][1] * Dims[Layer][1]) + Padding[Layer];
+											TotalMemSize *= DataType.sizeInBytes();
+
 											// Input
 											Ei.setLMemLinearWrapped("Input" + Layer,
 																	Ei.addConstant(MemStart),
@@ -345,6 +345,9 @@ class MovingAverageSimpleManager extends CustomManager
 											break;
 
 								case Pool:
+											TotalMemSize = (Dims[Layer][0] * Dims[Layer][1] * Dims[Layer][1]) + Padding[Layer];
+											TotalMemSize *= DataType.sizeInBytes();
+
 											// Input
 											Ei.setLMemLinearWrapped("Input" + Layer,
 																	Ei.addConstant(MemStart),
@@ -353,11 +356,33 @@ class MovingAverageSimpleManager extends CustomManager
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
+
+											break;
+
+								case Fcon:
+											TotalMemSize = (Dims[Layer][0] * Dims[Layer][1]) + Padding[Layer];
+											TotalMemSize *= DataType.sizeInBytes();
+
+											// Input
+											Ei.setLMemLinearWrapped("Input" + Layer,
+																	Ei.addConstant(MemStart + (FirstOutputs[Layer] * BurstSizeBytes * BurstMult)),
+																	Ei.addConstant(BurstMult * BurstSizeBytes),
+																	(Enables[Layer] > 0 ? 1 : 0) * (Math.pow(BurstMult * BurstSizeBytes, 2)),
+																	Ei.addConstant(0));
+
+											MemStart += TotalMemSize;
+
+											// Prev Output
+											Ei.setLMemLinear("PrevOutput" + Layer, 
+															MemStart + ( (MemControl[Layer]) * OutputSizeBytes), 
+															(Enables[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
 											break;
 							}
 
-							// Output
-							Ei.setLMemLinear("Output" + Layer, MemStart + ( (MemControl[Layer]) * OutputSizeBytes), (Enables[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
+						// Output
+						Ei.setLMemLinear("Output" + Layer, 
+										MemStart + ( (MemControl[Layer]) * OutputSizeBytes), 
+										(Enables[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
 					}
 
 					// Ignore Every Param not used here
@@ -517,7 +542,7 @@ class MovingAverageSimpleManager extends CustomManager
 			    			case Conv:
 										if((2 * Dims[i][0] * Params[i][2] * Params[i][2]) > WeightDims)
 										{
-											WeightDims = (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
+											WeightDims += (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
 										}
 					    				break;
 
@@ -525,7 +550,7 @@ class MovingAverageSimpleManager extends CustomManager
 					    				break;
 
 			    			case Fcon:
-										WeightDims += 0;
+										WeightDims += Math.pow(BurstMult*BurstSizeDataType, 2);
 					    				break;
 			    	}
 

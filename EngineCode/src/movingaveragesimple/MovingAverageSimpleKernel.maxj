@@ -103,7 +103,7 @@ class MovingAverageSimpleKernel extends Kernel
 
 				DFEVar PadEnable = io.scalarInput("PadEnable" + Layer, dfeUInt(32));
 
-			// Mem Control ( Not needed, but compiler error otherwise)
+			// Mem Control
 
 				DFEVar MemControl = io.scalarInput("MemControl" + Layer, dfeUInt(32));
 
@@ -141,7 +141,7 @@ class MovingAverageSimpleKernel extends Kernel
 									Dims[Layer], Dims[Layer + 1],
 									BurstMult,
 									Weights, WeightBits,
-									Enable, FirstOutput, PadEnable);
+									Enable, MemControl, PadEnable);
 							break;
 			}
 		}
@@ -666,7 +666,7 @@ class MovingAverageSimpleKernel extends Kernel
 										 int[] InDims, int[] OutDims,
 										 int BurstMult,
 										 Memory<DFEVar> Weights, int WeightBits,
-										 DFEVar Enable, DFEVar FirstOutput, DFEVar PadEnable)
+										 DFEVar Enable, DFEVar MemControl, DFEVar PadEnable)
 				{
 					/*
 					 [0] = ActFunc
@@ -739,6 +739,9 @@ class MovingAverageSimpleKernel extends Kernel
 					Output += OutputToAdd;
 					OutputCarry <== stream.offset(Output, BurstSizeDataType * BurstMult);
 
+					// Get Prev Output
+					DFEVar PrevOutput = io.input("PrevOutput" + Layer, IODataType, Enable > 0 & DataOutEnable);
+					Output = DataOutEnable ? Output + PrevOutput : Output;
 
 					// --------------------------------------------- //
 					// ---------- 		Output		       ----------//
@@ -748,16 +751,16 @@ class MovingAverageSimpleKernel extends Kernel
 					switch((int) Params[0])
 					{
 						case ReLu:
-									Output = DataOutEnable ? (Output > 0 ? Output : 0) : Output;
+									Output = MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (Output > 0 ? Output : 0) : Output;
 									break;
 
 						case Sigmoid:
-									Output = DataOutEnable ? 1/( 1 + KernelMath.exp(-Output)) : Output;
+									Output = MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? 1/( 1 + KernelMath.exp(-Output)) : Output;
 									break;
 						case Tanh:
 									// No Direct function for tanh
 									DFEVar aux = KernelMath.exp(2 * Output);
-									Output = DataOutEnable ? (aux - 1) / (aux + 1) : Output;
+									Output = MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (aux - 1) / (aux + 1) : Output;
 									break;
 					}
 

@@ -49,12 +49,15 @@ int main()
 	//CreateTestNetwork(Net, InDims);
 
 	SetBurstMult(Net, 0, 512);
+	SetBurstMult(Net, 1, 1024);
+	SetBurstMult(Net, 2, 256);
 
 	double*** Input = Init3D(InDims);
 	RandomizeArray3D(Input, InDims, 0, 5);
 
-	CNNForwardDFE(*Net, Input);
+	//CNNForwardDFE(*Net, Input);
 
+	Free3D(Input);
 	FreeCNN(Net);
 	free(Net);
 

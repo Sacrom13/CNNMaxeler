@@ -938,7 +938,7 @@
 			}
 	}
 
-	static void BlockForwardDFE(Block Block)
+	/*static void BlockForwardDFE(Block Block)
 	{
 		// Write Block info
 		WriteLayers(Block);
@@ -1049,3 +1049,4 @@
 
 		return NULL;
 	}
+	*/

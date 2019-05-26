@@ -276,12 +276,58 @@
 
 			void SetBurstMult(Network* Net, int Block, int BM)
 			{
+				// Calculate new Output Size
+				int OutputSize = BM * BurstSizeDataType;
+
+				// Check if BurstMult is valid
+				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
+				{
+					switch(Net->Blocks[Block].Layers[Layer])
+					{
+						case Conv:
+									if(BM * BurstSizeDataType >= 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
+									{
+										printf("Cannot set BurstSize.\n");
+										printf("Layer %d(Conv) in Block %d has Output Dims %dx%d\n", Layer + 1, Block + 1, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][1]);
+										printf("BurstMult*BurstSize = %dx%d =  %d, which has to be less than 2*%d*%d = %d\n", BM, BurstSizeDataType, BM * BurstSizeDataType, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][1], 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][1]);
+									}
+
+									break;
+						case Fcon:
+									if(pow(BM * BurstSizeDataType, 2) > pow(2,16))
+									{
+										printf("Cannot set BurstSize.\n");
+										printf("Layer %d(Fcon) in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+										printf("(BurstMult*BurstSizeDataType)^2 = %d, which has to be less than 65536\n", (int)pow(BM * BurstSizeDataType, 2));
+									}
+
+									break;
+					}
+				}
+
+				// Free previous Params
+				if(Net->Blocks[Block].FParams.NCalls > 0)
+				{
+					for(int CurrentCall = 0; CurrentCall < (int) Net->Blocks[Block].FParams.NCalls; ++CurrentCall)
+					{
+						free(Net->Blocks[Block].FParams.Enables[CurrentCall]);
+						free(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall]);
+						free(Net->Blocks[Block].FParams.MemControl[CurrentCall]);
+						free(Net->Blocks[Block].FParams.PadEnables[CurrentCall]);
+						free(Net->Blocks[Block].FParams.DFEWeights[CurrentCall]);
+					}
+
+					free(Net->Blocks[Block].FParams.Ticks);
+
+					free(Net->Blocks[Block].FParams.Enables);
+					free(Net->Blocks[Block].FParams.FirstOutputs);
+					free(Net->Blocks[Block].FParams.MemControl);
+					free(Net->Blocks[Block].FParams.PadEnables);
+					free(Net->Blocks[Block].FParams.DFEWeights);
+				}
 
 				// Set Burst Multiplier
 				Net->Blocks[Block].FParams.BurstMult = BM;
-
-				// Calculate new Output Size
-				int OutputSize = BM * BurstSizeDataType;
 
 				// --- Find out NCalls --- //
 
@@ -346,7 +392,7 @@
 				// Allocations
 
 					// Ticks
-					Net->Blocks[Block].FParams.Ticks = realloc(Net->Blocks[Block].FParams.Ticks, Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t));
+					Net->Blocks[Block].FParams.Ticks = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t));
 					if(Net->Blocks[Block].FParams.Ticks == NULL)
 					{
 						printf("Memory Allocation Error.\n");
@@ -354,7 +400,7 @@
 					}
 
 					// Enables
-					Net->Blocks[Block].FParams.Enables = realloc(Net->Blocks[Block].FParams.Enables, Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
+					Net->Blocks[Block].FParams.Enables = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
 					if(Net->Blocks[Block].FParams.Enables == NULL)
 					{
 						printf("Memory Allocation Error.\n");
@@ -362,7 +408,7 @@
 					}
 
 					// First Outputs
-					Net->Blocks[Block].FParams.FirstOutputs = realloc(Net->Blocks[Block].FParams.FirstOutputs, Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
+					Net->Blocks[Block].FParams.FirstOutputs = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
 					if(Net->Blocks[Block].FParams.FirstOutputs == NULL)
 					{
 						printf("Memory Allocation Error.\n");
@@ -370,7 +416,7 @@
 					}
 
 					// Mem Control
-					Net->Blocks[Block].FParams.MemControl = realloc(Net->Blocks[Block].FParams.MemControl, Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
+					Net->Blocks[Block].FParams.MemControl = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
 					if(Net->Blocks[Block].FParams.MemControl == NULL)
 					{
 						printf("Memory Allocation Error.\n");
@@ -378,7 +424,7 @@
 					}
 
 					// PadEnables
-					Net->Blocks[Block].FParams.PadEnables = realloc(Net->Blocks[Block].FParams.PadEnables, Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
+					Net->Blocks[Block].FParams.PadEnables = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
 					if(Net->Blocks[Block].FParams.PadEnables == NULL)
 					{
 						printf("Memory Allocation Error.\n");
@@ -386,7 +432,7 @@
 					}
 
 					// DFEWeights
-					Net->Blocks[Block].FParams.DFEWeights = realloc(Net->Blocks[Block].FParams.DFEWeights, Net->Blocks[Block].FParams.NCalls * sizeof(double*));
+					Net->Blocks[Block].FParams.DFEWeights = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(double*));
 					if(Net->Blocks[Block].FParams.DFEWeights == NULL)
 					{
 						printf("Memory Allocation Error.\n");
@@ -396,7 +442,7 @@
 					for(int CurrentCall = 0; CurrentCall < (int) Net->Blocks[Block].FParams.NCalls; ++CurrentCall)
 					{
 						// Ticks
-						Net->Blocks[Block].FParams.Ticks[CurrentCall] = 0;
+						Net->Blocks[Block].FParams.Ticks[CurrentCall] = UINT32_MAX;
 
 						// Enables
 						Net->Blocks[Block].FParams.Enables[CurrentCall] = calloc(Net->Blocks[Block].BlockSize, sizeof(uint32_t));
@@ -431,8 +477,7 @@
 						}
 
 						// DFEWeights
-						// 													 Max size for DFEWeights
-						Net->Blocks[Block].FParams.DFEWeights[CurrentCall] = calloc(	2*512*11*11, 				sizeof(double));
+						Net->Blocks[Block].FParams.DFEWeights[CurrentCall] = calloc(2*512*11*11,sizeof(double));
 						if(Net->Blocks[Block].FParams.DFEWeights[CurrentCall] == NULL)
 						{
 							printf("Memory Allocation Error.\n");
@@ -474,9 +519,10 @@
 											}
 										}
 
-										// Enables + Weights
+										// Enables
 										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
 
+										// Weights
 										for(int Kernel = 0; Kernel < 2; ++Kernel)
 										{
 											for(int Channel = 0; Channel < Net->Blocks[Block].Dims[Layer][0]; ++Channel)
@@ -508,9 +554,6 @@
 
 										// PadEnables
 										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
-
-										// Ticks
-										Net->Blocks[Block].FParams.Ticks[CurrentCall] = UINT32_MAX;
 									}
 
 									// Set LMemPadding only on last iteration
@@ -529,7 +572,6 @@
 										else
 										{
 											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = Net->Blocks[Block].FParams.FirstOutputs[CurrentCall - 1][Layer] + OutputSize;
-
 										}
 
 										// Enables
@@ -540,9 +582,6 @@
 
 										// PadEnables
 										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
-
-										// Ticks
-										Net->Blocks[Block].FParams.Ticks[CurrentCall] = UINT32_MAX;
 									}
 
 									// Set LMemPadding only on last iteration
@@ -551,6 +590,65 @@
 
 						case Fcon:
 
+									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
+									{
+										// First Outputs ( Used as Input Mem Control in this layer)
+										if(CurrentCall - LayerCalls[Layer][0] == 0)
+										{
+											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = 0;
+										}
+										else
+										{
+											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = Net->Blocks[Block].FParams.FirstOutputs[CurrentCall - 1][Layer] + 1;
+											if((int)(BurstSizeDataType * BM * Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer]) >= Net->Blocks[Block].Dims[Layer][2])
+											{
+												Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = 0;
+											}
+										}
+
+										// Enables
+										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
+
+										// Weights
+										for(int i = 0; i < BurstSizeDataType * BM; ++i)
+										{
+											for(int j = 0; j < OutputSize; ++j)
+											{
+												if((int)(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i) < Net->Blocks[Block].Dims[Layer][2])
+												{
+													Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = Net->Blocks[Block].Weights[Layer][0][0][(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i)][j];
+												}
+												else
+												{
+													Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = 0;
+												}
+												++pos[CurrentCall];
+											}
+										}
+										
+										
+										// Output Mem Control
+										if(CurrentCall - LayerCalls[Layer][0] == 0)
+										{
+											Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 0;
+										}
+										else
+										{
+											if(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] == 0)
+											{
+												Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = Net->Blocks[Block].FParams.MemControl[CurrentCall - 1][Layer] + 1;
+											}
+											else
+											{
+												Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = Net->Blocks[Block].FParams.MemControl[CurrentCall - 1][Layer];
+											}
+										}
+
+										// PadEnables
+										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
+									}
+
+									// Set LMemPadding only on last iteration
 									break;
 					}
 				}
@@ -713,6 +811,12 @@
 						printf("InDims = (%dx%d), KernelSize = %d, Padding = %d, Stride = %d.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1], CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1], KernelSize, Padding, Stride);
 						printf("InDims - KernelSize + 2*Padding = %d is not divisible by Stride.\n",(CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1] - KernelSize + (2 * Padding)));
 						exit(CNNConstructionError);
+					}
+
+					if(Padding >= KernelSize)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Padding has to be less than Kernel Size.\n");
 					}
  
 				// --- Set Layer and Parallelism level --- //
