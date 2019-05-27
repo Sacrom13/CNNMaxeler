@@ -141,7 +141,7 @@ class MovingAverageSimpleKernel extends Kernel
 									Dims[Layer], Dims[Layer + 1],
 									BurstMult,
 									Weights, WeightBits,
-									Enable, MemControl, PadEnable);
+									Enable, MemControl, PadEnable, FirstOutput);
 							break;
 			}
 		}
@@ -666,7 +666,7 @@ class MovingAverageSimpleKernel extends Kernel
 										 int[] InDims, int[] OutDims,
 										 int BurstMult,
 										 Memory<DFEVar> Weights, int WeightBits,
-										 DFEVar Enable, DFEVar MemControl, DFEVar PadEnable)
+										 DFEVar Enable, DFEVar MemControl, DFEVar PadEnable, DFEVar FirstOutput)
 				{
 					/*
 					 [0] = ActFunc
@@ -679,13 +679,15 @@ class MovingAverageSimpleKernel extends Kernel
 
 					// Output
 					Count.Params OutputParams = control.count.makeParams(MathUtils.bitsToAddress(BurstSizeDataType * BurstMult))
+					.withMax(BurstSizeDataType * BurstMult)
 					.withEnable(Enable > 0);
 					Counter OutputCounter = control.count.makeCounter(OutputParams);
 					DFEVar OutputTicks = OutputCounter.getCount().cast(dfeUInt(16));
 
 					// Input
 					Count.Params InputParams = control.count.makeParams(MathUtils.bitsToAddress(BurstSizeDataType * BurstMult))
-					.withEnable(Enable > 0 & OutputTicks.eq(InDims[1] - 1));
+					.withMax(BurstSizeDataType * BurstMult)
+					.withEnable(Enable > 0 & OutputTicks.eq(BurstSizeDataType * BurstMult - 1));
 					Counter InputCounter = control.count.makeCounter(InputParams);
 					DFEVar InputTicks = InputCounter.getCount().cast(dfeUInt(16));
 
@@ -700,7 +702,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// --------------------------------------------- //
 
 					DFEVar DataOutEnable = ( (Enable > 0) &
-										   ( (InputTicks.eq(InDims[1]/Parallelism - 1)) |
+										   ( (InputTicks.eq(BurstSizeDataType * BurstMult/Parallelism - 1)) |
 										   TickCount > PadEnable));
 
 					// --------------------------------------------- //
@@ -714,16 +716,17 @@ class MovingAverageSimpleKernel extends Kernel
 						// Get Data Point
 
 							// Calculate Offset of input data
-							int DataOffset = CurIn*BurstSizeDataType * BurstMult;
+							int DataOffset = CurIn * BurstSizeDataType * BurstMult;
 
 							// Read input data from LMem
 							DFEVar Data = stream.offset(Input, DataOffset).cast(ComputationDataType);
+
 
 							// Get Weight
 
 								// Calculate Weight Offset
 								DFEVar WeightOffset = (InputTicks + CurIn) * BurstSizeDataType * BurstMult +		// Input Offset
-													  OutputTicks;												// Output Offset
+													  OutputTicks;													// Output Offset
 
 							// Read Weight from FMem
 							DFEVar Weight = Weights.read(WeightOffset.cast(dfeUInt(WeightBits))).cast(ComputationDataType);
@@ -737,11 +740,11 @@ class MovingAverageSimpleKernel extends Kernel
 					DFEVar OutputCarry = ComputationDataType.newInstance(this);
 					DFEVar OutputToAdd = InputTicks > 0 ? OutputCarry : 0;
 					Output += OutputToAdd;
-					OutputCarry <== stream.offset(Output, BurstSizeDataType * BurstMult);
+					OutputCarry <== stream.offset(Output, -BurstSizeDataType * BurstMult);
 
-					// Get Prev Output
+					// Get the previous result already in memory
 					DFEVar PrevOutput = io.input("PrevOutput" + Layer, IODataType, Enable > 0 & DataOutEnable);
-					Output = DataOutEnable ? Output + PrevOutput : Output;
+					Output += DataOutEnable ? PrevOutput.cast(ComputationDataType) : 0;
 
 					// --------------------------------------------- //
 					// ---------- 		Output		       ----------//

@@ -17,12 +17,13 @@
 
 				typedef struct
 				{
+					int InputOffset;			// Input Offset in LMem
+
 					char* Parallelism;			// Level of Parallelism of each layer
 
 		  			int BurstMult;				// Multiplier for DFEBurstSize. BurstSize for Galava is 192 Bytes. if DFEBurstMult = 2 then 192*2 Bytes are Calculated at once
 
 					uint32_t NCalls;			// How many times DFE has to be ran for this Block to finish Computation
-					uint32_t* Ticks;			// How many Ticks each Call will run for
 
 					uint32_t** Enables;			// If TickCount < Enables[Call][Layer], then Layer computes. otherwise, no computation
 					uint32_t** FirstOutputs;	// First Output Point for a given Layer of a given Call

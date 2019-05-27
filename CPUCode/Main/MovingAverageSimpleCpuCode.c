@@ -20,10 +20,10 @@
 void CreateTestNetwork(Network* Net, int* InDims)
 {
 	InitCNN(Net, InDims);
-	AddBlock(Net);
-	AddConv(16, 3, 2, 2, 2);
+	/*AddBlock(Net);
+	AddConv(16, 3, 2, 2, 1);
 	AddActi(ReLu);
-	AddConv(16, 3, 1, 1, 4);
+	AddConv(16, 3, 1, 0, 4);
 	AddActi(ReLu);
 	AddPool(2, MaxPool, 2, 1);
 
@@ -33,7 +33,19 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddFcon(100, 1);
 	AddActi(Soft);
 
-	SetBurstMult(Net, 0, 4);
+	SetBurstMult(Net, 0, 8);*/
+
+	AddBlock(Net);
+	AddFcon(100, 1);
+	AddActi(ReLu);
+
+	AddBlock(Net);
+	AddFcon(100, 1);
+	AddActi(ReLu);
+	AddFcon(100, 1);
+	AddActi(Soft);
+
+	SetBurstMult(Net, 0, 1);
 }
 
 int main()
@@ -43,19 +55,14 @@ int main()
 	Network* Net = malloc(sizeof(Network));
 
 	printf("Setting Network\n");
-	int InDims[3] = {3, 224, 224};
+	int InDims[3] = {3, 29, 29};
 
-	CreateVGG16(Net);
-	//CreateTestNetwork(Net, InDims);
-
-	SetBurstMult(Net, 0, 512);
-	SetBurstMult(Net, 1, 1024);
-	SetBurstMult(Net, 2, 256);
+	CreateTestNetwork(Net, InDims);
 
 	double*** Input = Init3D(InDims);
 	RandomizeArray3D(Input, InDims, 0, 5);
 
-	//CNNForwardDFE(*Net, Input);
+	CNNForwardDFE(*Net, Input);
 
 	Free3D(Input);
 	FreeCNN(Net);

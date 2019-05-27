@@ -166,6 +166,13 @@ class MovingAverageSimpleManager extends CustomManager
 				// Outputs
 				DFELink Output = LMem.addStreamToLMem("Output" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
 				Output <== K.getOutput("Output" + Layer);
+
+				// Connect Extra Outputs in case Fcon Layer
+				if(Layers[Layer] == Fcon)
+				{
+					Input = LMem.addStreamFromLMem("PrevOutput" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+					K.getInput("PrevOutput" + Layer) <== Input;
+				}
 			}
 		}
 
@@ -224,52 +231,6 @@ class MovingAverageSimpleManager extends CustomManager
 					return Ei;
 				}
 
-		// 3.2 --- Weights --- //
-
-			private static EngineInterface SetupWeights(boolean Conv, boolean Fcon)
-			{
-				// Logic to name Interfaces to Setup Both Weights at once, or 1 at a time
-				String Name = "Setup";
-				if(Conv & Fcon)
-				{
-					Name += "Weights";
-				}
-				else
-				{
-					if(Conv)
-					{
-						Name += "ConvWeights";
-					}
-					if(Fcon)
-					{
-						Name += "FconWeights";
-					}
-				}
-				EngineInterface Ei = new EngineInterface(Name);
-
-				/*
-				// Setup Conv Weights
-				if(Conv)
-				{
-					InterfaceParamArray ConvWeights = Ei.addParamArray("ConvWeights", CPUTypes.DOUBLE);		// Array Param
-					Ei.setMem("Kernel", "ConvWeights", 0, ConvWeightsSize, ConvWeights);					// Setup FMem
-				}
-
-				// Setup FconWeights
-				if(Fcon)
-				{
-					InterfaceParamArray FconWeights = Ei.addParamArray("FconWeights", CPUTypes.DOUBLE);		// Array Param
-					Ei.setMem("Kernel", "FconWeights", 0, FconWeightsSize, FconWeights);					// Setup FMem
-				}
-				*/
-
-				// Ignore Everything that's not used in this Interface
-				Ei.ignoreAll(Direction.IN_OUT);
-
-				return Ei;
-
-			}
-
 	// 3.3 --- Propagation --- //
 
 		// 3.3.1 --- Forward --- //
@@ -279,8 +240,7 @@ class MovingAverageSimpleManager extends CustomManager
 				EngineInterface Ei = new EngineInterface("RunForward");
 
 				// Amount of Ticks Kernel will run for
-				InterfaceParam Ticks = Ei.addParam("Ticks", CPUTypes.UINT32);
-				Ei.setTicks("Kernel", Ticks);
+				Ei.setTicks("Kernel", Integer.MAX_VALUE);
 
 				// --------------------------------------------- //
 				// ---------- 		Get Params 		   ----------//
@@ -301,6 +261,9 @@ class MovingAverageSimpleManager extends CustomManager
 
 					// Parameter to control where bytes are written in memory
 					InterfaceParamArray MemControl = Ei.addParamArray("MemControl", CPUTypes.UINT32);
+
+					// Offset in LMem of where Input Starts
+					InterfaceParam InputOffset = Ei.addParam("InputOffset", CPUTypes.UINT32);
 
 
 				// --------------------------------------------- //
@@ -328,15 +291,17 @@ class MovingAverageSimpleManager extends CustomManager
 
 						// Setup Inputs and Outputs for each Layers
 
+							TotalMemSize = (Dims[Layer][0] * Dims[Layer][1] * Dims[Layer][1]);
+
 							switch(Layers[Layer])
 							{
 								case Conv:
-											TotalMemSize = (Dims[Layer][0] * Dims[Layer][1] * Dims[Layer][1]) + Padding[Layer];
+											TotalMemSize += Padding[Layer];
 											TotalMemSize *= DataType.sizeInBytes();
 
 											// Input
 											Ei.setLMemLinearWrapped("Input" + Layer,
-																	Ei.addConstant(MemStart),
+																	InputOffset + Ei.addConstant(MemStart),
 																	Ei.addConstant(TotalMemSize),
 																	(Enables[Layer] > 0 ? 1 : 0) * ((2 * TotalMemSize) + OutputSizeBytes),
 																	Ei.addConstant(0));
@@ -345,12 +310,12 @@ class MovingAverageSimpleManager extends CustomManager
 											break;
 
 								case Pool:
-											TotalMemSize = (Dims[Layer][0] * Dims[Layer][1] * Dims[Layer][1]) + Padding[Layer];
+											TotalMemSize += Padding[Layer];
 											TotalMemSize *= DataType.sizeInBytes();
 
 											// Input
 											Ei.setLMemLinearWrapped("Input" + Layer,
-																	Ei.addConstant(MemStart),
+																	InputOffset + Ei.addConstant(MemStart),
 																	Ei.addConstant(TotalMemSize),
 																	(Enables[Layer] > 0 ? 1 : 0) * (TotalMemSize + OutputSizeBytes),
 																	Ei.addConstant(0));
@@ -360,28 +325,33 @@ class MovingAverageSimpleManager extends CustomManager
 											break;
 
 								case Fcon:
-											TotalMemSize = (Dims[Layer][0] * Dims[Layer][1]) + Padding[Layer];
+											if(Dims[Layer][0] == 1)
+											{
+												TotalMemSize /= Dims[Layer][1];
+											}
+
+											TotalMemSize += Padding[Layer];
 											TotalMemSize *= DataType.sizeInBytes();
 
 											// Input
 											Ei.setLMemLinearWrapped("Input" + Layer,
-																	Ei.addConstant(MemStart + (FirstOutputs[Layer] * BurstSizeBytes * BurstMult)),
+																	InputOffset + MemStart + (FirstOutputs[Layer] * BurstSizeBytes * BurstMult),
 																	Ei.addConstant(BurstMult * BurstSizeBytes),
-																	(Enables[Layer] > 0 ? 1 : 0) * (Math.pow(BurstMult * BurstSizeBytes, 2)),
+																	(Enables[Layer] > 0 ? 1 : 0) * (int)(Math.pow(BurstMult * BurstSizeDataType, 2)* DataType.sizeInBytes() + OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
 
 											// Prev Output
-											Ei.setLMemLinear("PrevOutput" + Layer, 
-															MemStart + ( (MemControl[Layer]) * OutputSizeBytes), 
+											Ei.setLMemLinear("PrevOutput" + Layer,
+															InputOffset + MemStart + ( (MemControl[Layer]) * OutputSizeBytes),
 															(Enables[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
 											break;
 							}
 
 						// Output
-						Ei.setLMemLinear("Output" + Layer, 
-										MemStart + ( (MemControl[Layer]) * OutputSizeBytes), 
+						Ei.setLMemLinear("Output" + Layer,
+										InputOffset + MemStart + ( (MemControl[Layer]) * OutputSizeBytes),
 										(Enables[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
 					}
 
@@ -492,7 +462,7 @@ class MovingAverageSimpleManager extends CustomManager
 			    		case Fcon:
 
 			    				// Get Layer Params
-				    			for(i = 0; i < 2; ++i)
+				    			for(i = 0; i < 1; ++i)
 			    				{
 			    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 2]);
 			    				}
@@ -556,6 +526,10 @@ class MovingAverageSimpleManager extends CustomManager
 
 			    	// Calculate Padding
 			    	int TotalMemSize = (Dims[i][0] * Dims[i][1] * Dims[i][1]);
+			    	if(Dims[i][0] == 1)
+			    	{
+			    		TotalMemSize /= Dims[i][1];
+			    	}
 					if(TotalMemSize % OutputSizeDataType != 0)
 					{
 						Padding[i] = (OutputSizeDataType - (TotalMemSize % OutputSizeDataType));
@@ -602,9 +576,6 @@ class MovingAverageSimpleManager extends CustomManager
 			// Manager Configs
 
 			// Create Interfaces
-			m.createSlicInterface(SetupWeights(true, false));		// Setup Only Conv Weights
-			m.createSlicInterface(SetupWeights(false, true));		// Setup Only Fcon Weights
-			m.createSlicInterface(SetupWeights(true, true));		// Setup Both
 			m.createSlicInterface(InterfaceWrite());				// Write to LMem
 			m.createSlicInterface(InterfaceRead());					// Read to LMem
 			m.createSlicInterface(RunForward());					// Run ForwardProp

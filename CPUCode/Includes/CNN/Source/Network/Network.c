@@ -938,25 +938,81 @@
 			}
 	}
 
-	/*static void BlockForwardDFE(Block Block)
+	static void BlockForwardDFE(Block Block)
 	{
 		// Write Block info
 		WriteLayers(Block);
 
 		// --------------------------------------------- //
-		// ---------- 		Computation    	   ----------//
+		// ----------     	Basic Static	   ----------//
 		// --------------------------------------------- //
 
+			// --------------------------------------------- //
+			// ---------- 		Computation    	   ----------//
+			// --------------------------------------------- //
 
-		for(int CurrentCall = 0; CurrentCall < (int)Block.FParams.NCalls; ++CurrentCall)
-		{
-			printf("Running Call %d/%d.\n", CurrentCall + 1, Block.FParams.NCalls);
-			MovingAverageSimple_RunForward(Block.FParams.Ticks[CurrentCall],
-										   Block.FParams.Enables[CurrentCall], Block.FParams.FirstOutputs[CurrentCall],
-										   Block.FParams.MemControl[CurrentCall], Block.FParams.PadEnables[CurrentCall],
-										   Block.FParams.DFEWeights[CurrentCall]);
-		}
-		printf("\n");
+
+			for(int CurrentCall = 0; CurrentCall < (int)Block.FParams.NCalls; ++CurrentCall)
+			{
+				printf("Running Call %d/%d.\n", CurrentCall + 1, Block.FParams.NCalls);
+
+				// Running Blocking version.
+				MovingAverageSimple_RunForward(
+						Block.FParams.InputOffset,
+						Block.FParams.Enables[CurrentCall],
+						Block.FParams.FirstOutputs[CurrentCall],
+						Block.FParams.MemControl[CurrentCall],
+						Block.FParams.PadEnables[CurrentCall],
+						Block.FParams.DFEWeights[CurrentCall]);
+
+				/* To run NonBlock version
+				 * max_nowait(MovingAverageSimple_RunForward_nonblock(
+						Block.FParams.InputOffset,
+						Block.FParams.Enables[CurrentCall],
+						Block.FParams.FirstOutputs[CurrentCall],
+						Block.FParams.MemControl[CurrentCall],
+						Block.FParams.PadEnables[CurrentCall],
+						Block.FParams.DFEWeights[CurrentCall]));
+
+					Note: max_nowait can be replaced with max_wait() for control.
+				*/
+			}
+			printf("\n");
+
+		// --------------------------------------------- //
+		// ----------     Advanced Static      ----------//
+		// --------------------------------------------- //
+
+		// Not working. Problem with max_load
+		/*
+			// Init Max File
+			printf("Loading Max File!\n");
+			max_file_t *File = MovingAverageSimple_init();
+			max_engine_t *Engine = max_load(File, "local:*");
+			printf("Max File Loaded!\n");
+
+			// --------------------------------------------- //
+			// ---------- 		Computation    	   ----------//
+			// --------------------------------------------- //
+
+
+			for(int CurrentCall = 0; CurrentCall < (int)Block.FParams.NCalls; ++CurrentCall)
+			{
+				MovingAverageSimple_RunForward_actions_t Actions;
+				Actions.param_Enables = Block.FParams.Enables[CurrentCall];
+				Actions.param_FirstOutputs = Block.FParams.FirstOutputs[CurrentCall];
+				Actions.param_InputOffset = Block.FParams.InputOffset;
+				Actions.param_MemControl = Block.FParams.MemControl[CurrentCall];
+				Actions.param_PadEnables = Block.FParams.PadEnables[CurrentCall];
+				Actions.param_Weights = Block.FParams.DFEWeights[CurrentCall];
+
+
+				printf("Running Call %d/%d.\n", CurrentCall + 1, Block.FParams.NCalls);
+				MovingAverageSimple_RunForward_run(Engine, &Actions);
+			}
+			printf("\n");
+		*/
+
 
 	}
 
@@ -968,7 +1024,7 @@
 
 		// Setup Input
 
-		int InDims1D = Net.Blocks[0].Dims[0][0] * Net.Blocks[0].Dims[0][1] * Net.Blocks[0].Dims[0][1];
+		int InDims1D = Net.Blocks[0].Dims[0][0] * Net.Blocks[0].Dims[0][1] * Net.Blocks[0].Dims[0][2];
 
 		int OutputSizeDataType = (Net.Blocks[0].FParams.BurstMult * BurstSizeDataType);
 
@@ -1003,7 +1059,7 @@
 			int OutputStart = 0;
 			for(int i = 0; i < Net.Blocks[0].BlockSize; ++i)
 			{
-				int DimAux = Net.Blocks[0].Dims[i][0] * Net.Blocks[0].Dims[i][1] * Net.Blocks[0].Dims[i][1];
+				int DimAux = Net.Blocks[0].Dims[i][0] * Net.Blocks[0].Dims[i][1] * Net.Blocks[0].Dims[i][2];
 				if(DimAux % OutputSizeDataType != 0)
 				{
 					DimAux += (OutputSizeDataType - (DimAux % OutputSizeDataType));
@@ -1013,7 +1069,7 @@
 			}
 
 			int OutDims1D;
-			OutDims1D = Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][0] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][1] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][1];
+			OutDims1D = Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][0] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][1] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][2];
 			if(OutDims1D % OutputSizeDataType != 0)
 			{
 				OutDims1D += (OutputSizeDataType - (OutDims1D % OutputSizeDataType));
@@ -1049,4 +1105,3 @@
 
 		return NULL;
 	}
-	*/
