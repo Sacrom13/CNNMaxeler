@@ -512,7 +512,7 @@ class MovingAverageSimpleManager extends CustomManager
 			    			case Conv:
 										if((2 * Dims[i][0] * Params[i][2] * Params[i][2]) > WeightDims)
 										{
-											WeightDims += (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
+											WeightDims = (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
 										}
 					    				break;
 
@@ -520,7 +520,10 @@ class MovingAverageSimpleManager extends CustomManager
 					    				break;
 
 			    			case Fcon:
-										WeightDims += Math.pow(BurstMult*BurstSizeDataType, 2);
+			    						if(Math.pow(BurstMult*BurstSizeDataType, 2) > WeightDims)
+			    						{
+			    							WeightDims = Math.pow(BurstMult*BurstSizeDataType, 2);
+			    						}
 					    				break;
 			    	}
 

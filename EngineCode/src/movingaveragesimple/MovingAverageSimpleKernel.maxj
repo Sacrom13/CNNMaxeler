@@ -754,16 +754,16 @@ class MovingAverageSimpleKernel extends Kernel
 					switch((int) Params[0])
 					{
 						case ReLu:
-									Output = MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (Output > 0 ? Output : 0) : Output;
+									Output = DataOutEnable & MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (Output > 0 ? Output : 0) : Output;
 									break;
 
 						case Sigmoid:
-									Output = MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? 1/( 1 + KernelMath.exp(-Output)) : Output;
+									Output = DataOutEnable & MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? 1/( 1 + KernelMath.exp(-Output)) : Output;
 									break;
 						case Tanh:
 									// No Direct function for tanh
 									DFEVar aux = KernelMath.exp(2 * Output);
-									Output = MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (aux - 1) / (aux + 1) : Output;
+									Output = DataOutEnable & MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (aux - 1) / (aux + 1) : Output;
 									break;
 					}
 

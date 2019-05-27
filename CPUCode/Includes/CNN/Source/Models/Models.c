@@ -288,6 +288,7 @@
 										printf("Cannot set BurstSize.\n");
 										printf("Layer %d(Conv) in Block %d has Output Dims %dx%d\n", Layer + 1, Block + 1, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][1]);
 										printf("BurstMult*BurstSize = %dx%d =  %d, which has to be less than 2*%d*%d = %d\n", BM, BurstSizeDataType, BM * BurstSizeDataType, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][1], 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][1]);
+										exit(CNNConstructionError);
 									}
 
 									break;
@@ -296,7 +297,8 @@
 									{
 										printf("Cannot set BurstSize.\n");
 										printf("Layer %d(Fcon) in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-										printf("(BurstMult*BurstSizeDataType)^2 = %d, which has to be less than 65536\n", (int)pow(BM * BurstSizeDataType, 2));
+										printf("(BurstMult*BurstSizeDataType)^2 = %.0f, which has to be less than 65536\n", pow(BM * BurstSizeDataType, 2));
+										exit(CNNConstructionError);
 									}
 
 									break;
@@ -491,6 +493,7 @@
 
 									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
 									{
+										printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
 
 										// First Outputs
 										if(CurrentCall - LayerCalls[Layer][0] == 0)
@@ -551,6 +554,8 @@
 
 									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
 									{
+										printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
+
 										// First Outputs
 										if(CurrentCall - LayerCalls[Layer][0] == 0)
 										{
@@ -578,6 +583,8 @@
 						case Fcon:
 									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
 									{
+										printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
+
 										// First Outputs ( Used as Input Mem Control in this layer)
 										if(CurrentCall - LayerCalls[Layer][0] == 0)
 										{
@@ -639,7 +646,7 @@
 									break;
 					}
 				}
-
+				printf("\33[2K");
 				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
 				{
 					free(LayerCalls[Layer]);
@@ -1079,14 +1086,14 @@
 
 				// --- Check if Fcon Layer can be added --- //
 
-					/*if(CurrentNet->TotalBlocks > 0)
+					if(CurrentNet->TotalBlocks > 0)
 					{
-						if(CurrentNet->Blocks[CurrentNet->TotalBlocks - 1].LayerParams[CurrentNet->Blocks[CurrentNet->TotalBlocks - 1].BlockSize][0] == Soft)
+						if(CurrentNet->Blocks[CurrentNet->TotalBlocks - 1].LayerParams[CurrentNet->Blocks[CurrentNet->TotalBlocks - 1].BlockSize - 1][0] == Soft)
 						{
 							printf("No Layers can be added after Fcon layer with Softmax activation\n");
 							exit(CNNConstructionError);
 						}
-					}*/
+					}
 
 				// --- Set Layer and Parallelism --- //
 
@@ -1375,6 +1382,13 @@
 			AddActi(ReLu);
 			AddFcon(1000, 1);
 			AddActi(Soft);
+
+			// Possible Burst Mult Setup
+			SetBurstMult(Net, 0, 2048);
+			SetBurstMult(Net, 1, 1024);
+			SetBurstMult(Net, 2, 256);
+			SetBurstMult(Net, 3, 64);
+			SetBurstMult(Net, 4, 8);
 		}
 
 // 4 --- Print Arch --- //

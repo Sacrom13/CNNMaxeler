@@ -938,6 +938,7 @@
 			}
 	}
 
+	
 	static void BlockForwardDFE(Block Block)
 	{
 		// Write Block info
@@ -965,17 +966,17 @@
 						Block.FParams.PadEnables[CurrentCall],
 						Block.FParams.DFEWeights[CurrentCall]);
 
-				/* To run NonBlock version
-				 * max_nowait(MovingAverageSimple_RunForward_nonblock(
-						Block.FParams.InputOffset,
-						Block.FParams.Enables[CurrentCall],
-						Block.FParams.FirstOutputs[CurrentCall],
-						Block.FParams.MemControl[CurrentCall],
-						Block.FParams.PadEnables[CurrentCall],
-						Block.FParams.DFEWeights[CurrentCall]));
+				// To run NonBlock version
+					//max_nowait(MovingAverageSimple_RunForward_nonblock(
+					//	Block.FParams.InputOffset,
+					//	Block.FParams.Enables[CurrentCall],
+					//	Block.FParams.FirstOutputs[CurrentCall],
+					//	Block.FParams.MemControl[CurrentCall],
+					//	Block.FParams.PadEnables[CurrentCall],
+					//	Block.FParams.DFEWeights[CurrentCall]));
 
-					Note: max_nowait can be replaced with max_wait() for control.
-				*/
+				//	Note: max_nowait can be replaced with max_wait() for control.
+				
 			}
 			printf("\n");
 
@@ -1012,8 +1013,6 @@
 			}
 			printf("\n");
 		*/
-
-
 	}
 
 	double* CNNForwardDFE(Network Net, double*** Input)

@@ -45,7 +45,7 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddFcon(100, 1);
 	AddActi(Soft);
 
-	SetBurstMult(Net, 0, 1);
+	SetBurstMult(Net, 0, 4);
 }
 
 int main()
@@ -58,9 +58,12 @@ int main()
 	int InDims[3] = {3, 29, 29};
 
 	CreateTestNetwork(Net, InDims);
+	//CreateVGG16(Net);
 
 	double*** Input = Init3D(InDims);
 	RandomizeArray3D(Input, InDims, 0, 5);
+
+	printf("Network Set!\n");
 
 	CNNForwardDFE(*Net, Input);
 
