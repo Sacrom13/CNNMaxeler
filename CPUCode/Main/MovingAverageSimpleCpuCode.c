@@ -20,23 +20,13 @@
 void CreateTestNetwork(Network* Net, int* InDims)
 {
 	InitCNN(Net, InDims);
-	/*AddBlock(Net);
+	AddBlock(Net);
 	AddConv(16, 3, 2, 2, 1);
-	AddActi(ReLu);
+	AddActi(Sigmoid);
 	AddConv(16, 3, 1, 0, 4);
-	AddActi(ReLu);
+	AddActi(Tanh);
 	AddPool(2, MaxPool, 2, 1);
-
-	AddBlock(Net);
-	AddFcon(100, 1);
-	AddActi(ReLu);
-	AddFcon(100, 1);
-	AddActi(Soft);
-
-	SetBurstMult(Net, 0, 8);*/
-
-	AddBlock(Net);
-	AddFcon(100, 1);
+	AddFcon(1000, 1);
 	AddActi(ReLu);
 
 	AddBlock(Net);
@@ -45,7 +35,7 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddFcon(100, 1);
 	AddActi(Soft);
 
-	SetBurstMult(Net, 0, 4);
+	SetBurstMult(Net, 0, 3);
 }
 
 int main()

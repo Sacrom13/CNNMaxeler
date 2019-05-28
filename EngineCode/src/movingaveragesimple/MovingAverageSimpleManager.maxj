@@ -485,10 +485,24 @@ class MovingAverageSimpleManager extends CustomManager
 
 				WeightDims = 0;
 
-				Padding = new int[LayerCount - 1];
+				Padding = new int[LayerCount];
 
 			    Dims[0][0] = DimsAux[0][0];
 			    Dims[0][1] = DimsAux[0][1];
+
+			    int TotalMemSize = (Dims[0][0] * Dims[0][1] * Dims[0][1]);
+		    	if(Dims[0][0] == 1)
+		    	{
+		    		TotalMemSize /= Dims[0][1];
+		    	}
+				if(TotalMemSize % OutputSizeDataType != 0)
+				{
+					Padding[0] = (OutputSizeDataType - (TotalMemSize % OutputSizeDataType));
+				}
+				else
+				{
+					Padding[0] = 0;
+				}
 
 			    // Cycle to Copy Params. layercount - 1 Because of the extra Output Layer (0), that only has Output Dims
 			    for(int i = 0; i < LayerCount - 1; i++)
@@ -522,26 +536,27 @@ class MovingAverageSimpleManager extends CustomManager
 			    			case Fcon:
 			    						if(Math.pow(BurstMult*BurstSizeDataType, 2) > WeightDims)
 			    						{
-			    							WeightDims = Math.pow(BurstMult*BurstSizeDataType, 2);
+			    							WeightDims = (int) Math.pow(BurstMult*BurstSizeDataType, 2);
 			    						}
 					    				break;
 			    	}
 
 			    	// Calculate Padding
-			    	int TotalMemSize = (Dims[i][0] * Dims[i][1] * Dims[i][1]);
-			    	if(Dims[i][0] == 1)
+			    	TotalMemSize = (Dims[i + 1][0] * Dims[i + 1][1] * Dims[i + 1][1]);
+			    	if(Dims[i + 1][0] == 1)
 			    	{
-			    		TotalMemSize /= Dims[i][1];
+			    		TotalMemSize /= Dims[i + 1][1];
 			    	}
 					if(TotalMemSize % OutputSizeDataType != 0)
 					{
-						Padding[i] = (OutputSizeDataType - (TotalMemSize % OutputSizeDataType));
+						Padding[i + 1] = (OutputSizeDataType - (TotalMemSize % OutputSizeDataType));
 					}
 					else
 					{
-						Padding[i] = 0;
+						Padding[i + 1] = 0;
 					}
 			    }
+
 
 			    br = new BufferedReader(new FileReader("params.txt"));
 			    Aux = br.readLine().split(" ");

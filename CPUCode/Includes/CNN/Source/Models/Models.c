@@ -278,6 +278,11 @@
 				int OutputSize = BM * BurstSizeDataType;
 
 				// Check if BurstMult is valid
+				if(BM < 1)
+				{
+					printf("Cannot set BurstSize.\n");
+					printf("BurstMult has to be >= 1");
+				}
 				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
 				{
 					switch(Net->Blocks[Block].Layers[Layer])
@@ -293,11 +298,11 @@
 
 									break;
 						case Fcon:
-									if(pow(BM * BurstSizeDataType, 2) > pow(2,16))
+									if(BM > 3)
 									{
 										printf("Cannot set BurstSize.\n");
 										printf("Layer %d(Fcon) in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-										printf("(BurstMult*BurstSizeDataType)^2 = %.0f, which has to be less than 65536\n", pow(BM * BurstSizeDataType, 2));
+										printf("Blocks with Fcon Layers must have BurstMult < 4\n");
 										exit(CNNConstructionError);
 									}
 
@@ -493,7 +498,7 @@
 
 									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
 									{
-										printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
+										//printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
 
 										// First Outputs
 										if(CurrentCall - LayerCalls[Layer][0] == 0)
@@ -554,7 +559,7 @@
 
 									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
 									{
-										printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
+										//printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
 
 										// First Outputs
 										if(CurrentCall - LayerCalls[Layer][0] == 0)
@@ -583,7 +588,7 @@
 						case Fcon:
 									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
 									{
-										printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
+										//printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
 
 										// First Outputs ( Used as Input Mem Control in this layer)
 										if(CurrentCall - LayerCalls[Layer][0] == 0)
@@ -601,23 +606,6 @@
 
 										// Enables
 										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
-
-										// Weights
-										for(int i = 0; i < BurstSizeDataType * BM; ++i)
-										{
-											for(int j = 0; j < OutputSize; ++j)
-											{
-												if((int)(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i) < Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2])
-												{
-													Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = Net->Blocks[Block].Weights[Layer][0][0][(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i)][j];
-												}
-												else
-												{
-													Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = 0;
-												}
-												++pos[CurrentCall];
-											}
-										}
 										
 										
 										// Output Mem Control
@@ -637,16 +625,49 @@
 											}
 										}
 
+										// Weights
+										for(int i = 0; i < BurstSizeDataType * BM; ++i)
+										{
+											for(int j = 0; j < OutputSize; ++j)
+											{
+												if((int)(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i) < Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2])
+												{
+													if((int)(BM * BurstSizeDataType * Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] + j) < Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
+													{
+														Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = Net->Blocks[Block].Weights[Layer][0][0][(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i)][BM * BurstSizeDataType * Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] + j];
+													}
+													else
+													{
+														Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = 0;
+													}
+												}
+												else
+												{
+													Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = 0;
+												}
+												++pos[CurrentCall];
+											}
+										}
+
 										// PadEnables
 										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
 									}
 
 									// Set LMemPadding only on last iteration
-									//Net->Blocks[Block].FParams.PadEnables[LayerCalls[Layer][1] - 1][Layer] = pow(BurstSizeDataType * BM, 2);
+
+									int OutputPadding = 0;
+									int TotalMemSize = Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2];
+
+									if(TotalMemSize % OutputSize != 0)
+									{
+										OutputPadding = (OutputSize - (TotalMemSize % OutputSize));
+									}
+
+									Net->Blocks[Block].FParams.PadEnables[LayerCalls[Layer][1] - 1][Layer] = pow(BM*BurstSizeDataType,2)/Net->Blocks[Block].FParams.Parallelism[Layer] - OutputPadding - 1;
 									break;
 					}
 				}
-				printf("\33[2K");
+				//printf("\33[2K");
 				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
 				{
 					free(LayerCalls[Layer]);
@@ -883,7 +904,7 @@
 							exit(MemoryError);
 						}
 
-						RandomizeArray3D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][i], WeightDims, 0, 0.05);
+						RandomizeArray3D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][i], WeightDims, -0.05, 0.05);
 					}
 				
 				// --- Count number of Layers in this block --- //
@@ -1148,7 +1169,7 @@
 					for(int i = 0; i < InputSize; ++i)		
 					{
 						CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0][0][i] = Init1D(OutputSize);
-						RandomizeArray1D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0][0][i], OutputSize, 0, 0.05);		// Assign Random Values to Weights
+						RandomizeArray1D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0][0][i], OutputSize, -0.05, 0.05);		// Assign Random Values to Weights
 					}
 
 				// --- Count number of Layers in this block --- //

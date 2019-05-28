@@ -137,11 +137,11 @@ class MovingAverageSimpleKernel extends Kernel
 							break;
 				case Fcon:
 							FconForward(TickCount, Layer,
-									Parallelism[Layer], Params[Layer],
+									Parallelism[Layer], Params[Layer], Padding[Layer],
 									Dims[Layer], Dims[Layer + 1],
 									BurstMult,
 									Weights, WeightBits,
-									Enable, MemControl, PadEnable, FirstOutput);
+									Enable, FirstOutput, PadEnable);
 							break;
 			}
 		}
@@ -381,6 +381,9 @@ class MovingAverageSimpleKernel extends Kernel
 									break;
 					}
 
+					// Output 0 if Padding
+					Output = TickCount > PadEnable ? 0 : Output;
+
 					// Write Result to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
 
@@ -496,7 +499,7 @@ class MovingAverageSimpleKernel extends Kernel
 								Output = Output > Data ? Output : Data;
 						}
 					}
-
+//
 					// --------------------------------------------- //
 					// ---------- 		Output		       ----------//
 					// --------------------------------------------- //
@@ -517,6 +520,9 @@ class MovingAverageSimpleKernel extends Kernel
 									Output = DataOutEnable ? (aux - 1) / (aux + 1) : Output;
 									break;
 					}
+
+					// Output 0 if Padding
+					Output = TickCount > PadEnable ? 0 : Output;
 
 					// Output to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
@@ -662,11 +668,11 @@ class MovingAverageSimpleKernel extends Kernel
 			// 3.2.1 --- Forward --- //
 
 				private void FconForward(DFEVar TickCount, int Layer,
-										 int Parallelism, double[] Params,
+										 int Parallelism, double[] Params, int InputPadding,
 										 int[] InDims, int[] OutDims,
 										 int BurstMult,
 										 Memory<DFEVar> Weights, int WeightBits,
-										 DFEVar Enable, DFEVar MemControl, DFEVar PadEnable, DFEVar FirstOutput)
+										 DFEVar Enable, DFEVar FirstOutput, DFEVar PadEnable)
 				{
 					/*
 					 [0] = ActFunc
@@ -702,8 +708,15 @@ class MovingAverageSimpleKernel extends Kernel
 					// --------------------------------------------- //
 
 					DFEVar DataOutEnable = ( (Enable > 0) &
-										   ( (InputTicks.eq(BurstSizeDataType * BurstMult/Parallelism - 1)) |
-										   TickCount > PadEnable));
+										   ( (InputTicks.eq(BurstSizeDataType * BurstMult/Parallelism - 1))));
+
+					// Output Points
+					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(BurstMult * BurstSizeDataType) + 1)
+					.withEnable(Enable > 0 & DataOutEnable);
+					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
+					DFEVar OutPointTicks = OutPointCounter.getCount().cast(dfeUInt(32));
+
+					DataOutEnable &= OutPointTicks < BurstMult*BurstSizeDataType;
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -743,29 +756,38 @@ class MovingAverageSimpleKernel extends Kernel
 					OutputCarry <== stream.offset(Output, -BurstSizeDataType * BurstMult);
 
 					// Get the previous result already in memory
-					DFEVar PrevOutput = io.input("PrevOutput" + Layer, IODataType, Enable > 0 & DataOutEnable);
+					DFEVar PrevOutput = io.input("PrevOutput" + Layer, IODataType, DataOutEnable);
 					Output += DataOutEnable ? PrevOutput.cast(ComputationDataType) : 0;
 
 					// --------------------------------------------- //
 					// ---------- 		Output		       ----------//
 					// --------------------------------------------- //
 
+					int FirstOutputMax = InDims[0] > 1 ? InDims[0] * InDims[1] * InDims[1] : InDims[1];
+					FirstOutputMax /= (BurstMult * BurstSizeDataType);
+					FirstOutputMax = InputPadding > 0 ? FirstOutputMax : FirstOutputMax - 1;
+
+					DFEVar ActEnable = DataOutEnable & FirstOutput.eq(FirstOutputMax);
+
 					// Activation function
 					switch((int) Params[0])
 					{
 						case ReLu:
-									Output = DataOutEnable & MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (Output > 0 ? Output : 0) : Output;
+									Output = ActEnable ? (Output > 0 ? Output : 0) : Output;
 									break;
 
 						case Sigmoid:
-									Output = DataOutEnable & MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? 1/( 1 + KernelMath.exp(-Output)) : Output;
+									Output = ActEnable ? 1/( 1 + KernelMath.exp(-Output)) : Output;
 									break;
 						case Tanh:
 									// No Direct function for tanh
 									DFEVar aux = KernelMath.exp(2 * Output);
-									Output = DataOutEnable & MemControl.eq(OutDims[1] / (BurstMult * BurstSizeDataType)) ? (aux - 1) / (aux + 1) : Output;
+									Output = ActEnable ? (aux - 1) / (aux + 1) : Output;
 									break;
 					}
+
+					// Output 0 if Padding
+					Output = TickCount > PadEnable ? 0 : Output;
 
 					// Output to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);

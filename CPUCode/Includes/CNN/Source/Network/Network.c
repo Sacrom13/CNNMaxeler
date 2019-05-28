@@ -1100,7 +1100,7 @@
 			Print1DMatrix(TestOutput1D, OutDims1D);
 
 			double Margin = 1e-3;
-			Compare1D(Output, TestOutput1D, Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][0] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][1] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][1], Margin);
+			Compare1D(Output, TestOutput1D, OutDims1D, Margin);
 
 		return NULL;
 	}
