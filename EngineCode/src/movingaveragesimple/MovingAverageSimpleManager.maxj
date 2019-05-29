@@ -250,9 +250,6 @@ class MovingAverageSimpleManager extends CustomManager
 					InterfaceParamArray Weights = Ei.addParamArray("Weights", CPUTypes.DOUBLE);
 					Ei.setMem("Kernel", "Weights", 0, WeightDims, Weights);
 
-					// Enables
-					InterfaceParamArray Enables = Ei.addParamArray("Enables", CPUTypes.UINT32);
-
 					// First Output Points
 					InterfaceParamArray FirstOutputs = Ei.addParamArray("FirstOutputs", CPUTypes.UINT32);
 
@@ -273,10 +270,6 @@ class MovingAverageSimpleManager extends CustomManager
 					int MemStart = 0, TotalMemSize;
 					for(int Layer = 0; Layer < Layers.length; ++Layer)
 					{
-						// Setup Enables
-
-							Ei.setScalar("Kernel", "Enable" + Layer, Enables[Layer]);
-
 						// Setup First Output Points
 
 							Ei.setScalar("Kernel", "FirstOutput" + Layer, FirstOutputs[Layer]);
@@ -303,7 +296,7 @@ class MovingAverageSimpleManager extends CustomManager
 											Ei.setLMemLinearWrapped("Input" + Layer,
 																	InputOffset + Ei.addConstant(MemStart),
 																	Ei.addConstant(TotalMemSize),
-																	(Enables[Layer] > 0 ? 1 : 0) * ((2 * TotalMemSize) + OutputSizeBytes),
+																	(MemControl[Layer] > 0 ? 1 : 0) * ((2 * TotalMemSize) + OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
@@ -317,7 +310,7 @@ class MovingAverageSimpleManager extends CustomManager
 											Ei.setLMemLinearWrapped("Input" + Layer,
 																	InputOffset + Ei.addConstant(MemStart),
 																	Ei.addConstant(TotalMemSize),
-																	(Enables[Layer] > 0 ? 1 : 0) * (TotalMemSize + OutputSizeBytes),
+																	(MemControl[Layer] > 0 ? 1 : 0) * (TotalMemSize + OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
@@ -337,22 +330,22 @@ class MovingAverageSimpleManager extends CustomManager
 											Ei.setLMemLinearWrapped("Input" + Layer,
 																	InputOffset + MemStart + (FirstOutputs[Layer] * BurstSizeBytes * BurstMult),
 																	Ei.addConstant(BurstMult * BurstSizeBytes),
-																	(Enables[Layer] > 0 ? 1 : 0) * (int)(Math.pow(BurstMult * BurstSizeDataType, 2)* DataType.sizeInBytes() + OutputSizeBytes),
+																	(MemControl[Layer] > 0 ? 1 : 0) * (int)(Math.pow(BurstMult * BurstSizeDataType, 2)* DataType.sizeInBytes() + OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
 
 											// Prev Output
 											Ei.setLMemLinear("PrevOutput" + Layer,
-															InputOffset + MemStart + ( (MemControl[Layer]) * OutputSizeBytes),
-															(Enables[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
+															InputOffset + MemStart + ( (MemControl[Layer] - 1) * OutputSizeBytes),
+															(MemControl[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
 											break;
 							}
 
 						// Output
 						Ei.setLMemLinear("Output" + Layer,
-										InputOffset + MemStart + ( (MemControl[Layer]) * OutputSizeBytes),
-										(Enables[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
+										InputOffset + MemStart + ( (MemControl[Layer] - 1) * OutputSizeBytes),
+										(MemControl[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
 					}
 
 					// Ignore Every Param not used here

@@ -939,7 +939,7 @@
 	}
 
 	
-	static void BlockForwardDFE(Block Block)
+	/*static void BlockForwardDFE(Block Block)
 	{
 		// Write Block info
 		WriteLayers(Block);
@@ -960,7 +960,6 @@
 				// Running Blocking version.
 				MovingAverageSimple_RunForward(
 						Block.FParams.InputOffset,
-						Block.FParams.Enables[CurrentCall],
 						Block.FParams.FirstOutputs[CurrentCall],
 						Block.FParams.MemControl[CurrentCall],
 						Block.FParams.PadEnables[CurrentCall],
@@ -969,7 +968,6 @@
 				// To run NonBlock version
 					//max_nowait(MovingAverageSimple_RunForward_nonblock(
 					//	Block.FParams.InputOffset,
-					//	Block.FParams.Enables[CurrentCall],
 					//	Block.FParams.FirstOutputs[CurrentCall],
 					//	Block.FParams.MemControl[CurrentCall],
 					//	Block.FParams.PadEnables[CurrentCall],
@@ -1000,7 +998,6 @@
 			for(int CurrentCall = 0; CurrentCall < (int)Block.FParams.NCalls; ++CurrentCall)
 			{
 				MovingAverageSimple_RunForward_actions_t Actions;
-				Actions.param_Enables = Block.FParams.Enables[CurrentCall];
 				Actions.param_FirstOutputs = Block.FParams.FirstOutputs[CurrentCall];
 				Actions.param_InputOffset = Block.FParams.InputOffset;
 				Actions.param_MemControl = Block.FParams.MemControl[CurrentCall];
@@ -1013,9 +1010,9 @@
 			}
 			printf("\n");
 		*/
-	}
+	//}
 
-	double* CNNForwardDFE(Network Net, double*** Input)
+	/*double* CNNForwardDFE(Network Net, double*** Input)
 	{
 
 		// Write Network Design Parameters
@@ -1103,4 +1100,4 @@
 			Compare1D(Output, TestOutput1D, OutDims1D, Margin);
 
 		return NULL;
-	}
+	}*/

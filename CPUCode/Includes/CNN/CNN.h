@@ -13,8 +13,8 @@
 		#include "Source/Network/Network.h"
 		#include "Source/Models/Models.h"
 
-		#include "Maxfiles.h" 			// Includes .max files
-		#include <MaxSLiCInterface.h>	// Simple Live CPU interface
+		/*#include "Maxfiles.h" 			// Includes .max files
+		#include <MaxSLiCInterface.h>	// Simple Live CPU interface*/
 
 #endif
 

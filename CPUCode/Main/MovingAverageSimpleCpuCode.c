@@ -55,7 +55,7 @@ int main()
 
 	printf("Network Set!\n");
 
-	CNNForwardDFE(*Net, Input);
+	//CNNForwardDFE(*Net, Input);
 
 	Free3D(Input);
 	FreeCNN(Net);

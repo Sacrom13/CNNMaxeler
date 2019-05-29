@@ -315,14 +315,13 @@
 				{
 					for(int CurrentCall = 0; CurrentCall < (int) Net->Blocks[Block].FParams.NCalls; ++CurrentCall)
 					{
-						free(Net->Blocks[Block].FParams.Enables[CurrentCall]);
 						free(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall]);
 						free(Net->Blocks[Block].FParams.MemControl[CurrentCall]);
 						free(Net->Blocks[Block].FParams.PadEnables[CurrentCall]);
 						free(Net->Blocks[Block].FParams.DFEWeights[CurrentCall]);
 					}
 
-					free(Net->Blocks[Block].FParams.Enables);
+					free(Net->Blocks[Block].);
 					free(Net->Blocks[Block].FParams.FirstOutputs);
 					free(Net->Blocks[Block].FParams.MemControl);
 					free(Net->Blocks[Block].FParams.PadEnables);
@@ -366,8 +365,6 @@
 							printf("Memory Allocation Error.\n");
 							exit(MemoryError);
 						}
-
-
 
 						switch(Net->Blocks[Block].Layers[Layer])
 						{
@@ -433,14 +430,6 @@
 
 				// Allocations
 
-					// Enables
-					Net->Blocks[Block].FParams.Enables = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
-					if(Net->Blocks[Block].FParams.Enables == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
 					// First Outputs
 					Net->Blocks[Block].FParams.FirstOutputs = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
 					if(Net->Blocks[Block].FParams.FirstOutputs == NULL)
@@ -475,14 +464,6 @@
 
 					for(int CurrentCall = 0; CurrentCall < (int) Net->Blocks[Block].FParams.NCalls; ++CurrentCall)
 					{
-						// Enables
-						Net->Blocks[Block].FParams.Enables[CurrentCall] = calloc(Net->Blocks[Block].BlockSize, sizeof(uint32_t));
-						if(Net->Blocks[Block].FParams.Enables[CurrentCall] == NULL)
-						{
-							printf("Memory Allocation Error.\n");
-							exit(MemoryError);
-						}
-
 						// First Outputs
 						Net->Blocks[Block].FParams.FirstOutputs[CurrentCall] = calloc(Net->Blocks[Block].BlockSize, sizeof(uint32_t));
 						if(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall] == NULL)
@@ -551,9 +532,6 @@
 											}
 										}
 
-										// Enables
-										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
-
 										// Weights
 										for(int Kernel = 0; Kernel < 2; ++Kernel)
 										{
@@ -582,7 +560,7 @@
 										}
 
 										// Mem Control
-										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = CurrentCall - LayerCalls[Layer][0];
+										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 1 + CurrentCall - LayerCalls[Layer][0];
 
 										// PadEnables
 										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
@@ -608,11 +586,8 @@
 											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = Net->Blocks[Block].FParams.FirstOutputs[CurrentCall - 1][Layer] + OutputSize;
 										}
 
-										// Enables
-										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
-
 										// Mem Control
-										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = CurrentCall - LayerCalls[Layer][0];
+										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 1 + CurrentCall - LayerCalls[Layer][0];
 
 										// PadEnables
 										Net->Blocks[Block].FParams.PadEnables[CurrentCall][Layer] = UINT32_MAX;
@@ -640,15 +615,11 @@
 												Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = 0;
 											}
 										}
-
-										// Enables
-										Net->Blocks[Block].FParams.Enables[CurrentCall][Layer] = 1;
-										
 										
 										// Output Mem Control
 										if(CurrentCall - LayerCalls[Layer][0] == 0)
 										{
-											Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 0;
+											Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 1;
 										}
 										else
 										{

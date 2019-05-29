@@ -25,7 +25,6 @@
 
 					uint32_t NCalls;			// How many times DFE has to be ran for this Block to finish Computation
 
-					uint32_t** Enables;			// If TickCount < Enables[Call][Layer], then Layer computes. otherwise, no computation
 					uint32_t** FirstOutputs;	// First Output Point for a given Layer of a given Call
 					uint32_t** MemControl;		// Call Counter for DFE
 					uint32_t** PadEnables;		// if TickCount > Padding[Call][layer], then Padding is done
