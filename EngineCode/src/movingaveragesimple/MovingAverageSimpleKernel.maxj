@@ -398,7 +398,7 @@ class MovingAverageSimpleKernel extends Kernel
 		// 3.2 --- Pool --- //
 
 			// 3.2.1 --- Forward --- //
-
+//
 				private void MaxPoolForward(DFEVar TickCount, int Layer,
 											 int Parallelism, double[] Params,
 											 int[] InDims, int[] OutDims,

@@ -367,28 +367,65 @@
 							exit(MemoryError);
 						}
 
-						if(Layer == 0)
-						{
-							LayerCalls[Layer][0] = 0;
-						}
-						else
-						{
-							LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-						}
+
 
 						switch(Net->Blocks[Block].Layers[Layer])
 						{
 							case Conv:
-
+										if(Layer == 0)
+										{
+											LayerCalls[Layer][0] = 0;
+										}
+										else
+										{
+											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
+										}
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+										printf("ConvCalls[0] = %d\n", LayerCalls[Layer][0]);
+										printf("ConvCalls[1] = %d\n", LayerCalls[Layer][1]);
 										break;
 
 							case Pool:
-										LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+										if(Layer == 0)
+										{
+											LayerCalls[Layer][0] = 0;
+											LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+										}
+										else
+										{
+											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
+											LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+
+											//LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 1 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+											//LayerCalls[Layer][1] = LayerCalls[Layer - 1][1] + 1;
+
+											printf("PoolCalls[0] = %d\n", LayerCalls[Layer][0]);
+											printf("PoolCalls[1] = %d\n", LayerCalls[Layer][1]);
+										}
+
 										break;
 
 							case Fcon: 
+										if(Layer == 0)
+										{
+											LayerCalls[Layer][0] = 0;
+										}
+										else
+										{
+											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
+											/*if(Net->Blocks[Block].Layers[Layer - 1] == Fcon)
+											{
+												LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
+											}
+											else
+											{
+												LayerCalls[Layer][0] = LayerCalls[Layer - 1][0] + 1;
+											}*/
+										}
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + (int)(ceil(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2] / (float) OutputSize) * ceil(Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+
+										printf("FconCalls[0] = %d\n", LayerCalls[Layer][0]);
+										printf("FconCalls[1] = %d\n", LayerCalls[Layer][1]);
 										break;
 						}
 					}

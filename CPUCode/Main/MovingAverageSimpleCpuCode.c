@@ -22,9 +22,9 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	InitCNN(Net, InDims);
 	AddBlock(Net);
 	AddConv(16, 3, 2, 2, 1);
-	AddActi(Sigmoid);
+	AddActi(ReLu);
 	AddConv(16, 3, 1, 0, 4);
-	AddActi(Tanh);
+	AddActi(ReLu);
 	AddPool(2, MaxPool, 2, 1);
 	AddFcon(1000, 1);
 	AddActi(ReLu);
