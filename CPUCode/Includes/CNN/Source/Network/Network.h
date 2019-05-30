@@ -27,7 +27,6 @@
 
 					uint32_t** FirstOutputs;	// First Output Point for a given Layer of a given Call
 					uint32_t** MemControl;		// Call Counter for DFE
-					uint32_t** PadEnables;		// if TickCount > Padding[Call][layer], then Padding is done
 
 					double** DFEWeights;		// Weight Setup for each DFE Iteration
 

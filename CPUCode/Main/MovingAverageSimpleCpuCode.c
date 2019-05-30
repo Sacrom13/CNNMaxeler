@@ -20,20 +20,32 @@
 void CreateTestNetwork(Network* Net, int* InDims)
 {
 	InitCNN(Net, InDims);
+
 	AddBlock(Net);
 	AddConv(16, 3, 2, 2, 1);
 	AddActi(ReLu);
 	AddConv(16, 3, 1, 0, 4);
 	AddActi(ReLu);
 	AddPool(2, MaxPool, 2, 1);
-	AddFcon(1000, 1);
+	/*AddFcon(1000, 1);
+	AddActi(ReLu);*/
+
+	/*InitCNN(Net, InDims);
+
+	AddBlock(Net);
+	AddConv(64, 3, 1, 1, 1);
 	AddActi(ReLu);
+	AddConv(64, 3, 1, 1, 1);
+	AddActi(ReLu);
+	AddPool(2, MaxPool, 2, 1);*/
 
 	AddBlock(Net);
 	AddFcon(100, 1);
 	AddActi(ReLu);
 	AddFcon(100, 1);
 	AddActi(Soft);
+
+	//SetBurstMult(Net, 0, 2048);
 
 	SetBurstMult(Net, 0, 3);
 }
@@ -55,7 +67,7 @@ int main()
 
 	printf("Network Set!\n");
 
-	//CNNForwardDFE(*Net, Input);
+	CNNForwardDFE(*Net, Input);
 
 	Free3D(Input);
 	FreeCNN(Net);
