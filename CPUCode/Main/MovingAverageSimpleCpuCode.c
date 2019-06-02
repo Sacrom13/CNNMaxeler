@@ -27,8 +27,8 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddConv(16, 3, 1, 0, 4);
 	AddActi(ReLu);
 	AddPool(2, MaxPool, 2);
-	/*AddFcon(1000, 1);
-	AddActi(ReLu);*/
+	AddFcon(1000, 1);
+	AddActi(ReLu);
 
 	/*InitCNN(Net, InDims);
 

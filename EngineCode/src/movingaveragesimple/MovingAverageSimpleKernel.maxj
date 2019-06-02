@@ -123,7 +123,7 @@ class MovingAverageSimpleKernel extends Kernel
 							else if(Params[Layer][2] == MeanPool)
 							{
 								MeanPoolForward(TickCount, Layer,
-											Parallelism[Layer], Params[Layer],
+											Parallelism[Layer], Params[Layer], Padding[Layer],
 											Dims[Layer], Dims[Layer + 1],
 											BurstMult,
 											MemControl, FirstOutput);
@@ -536,7 +536,7 @@ class MovingAverageSimpleKernel extends Kernel
 				}
 
 				private void MeanPoolForward(DFEVar TickCount, int Layer,
-											 int Parallelism, double[] Params,
+											 int Parallelism, double[] Params, int Padding,
 											 int[] InDims, int[] OutDims,
 											 int BurstMult,
 											 DFEVar Enable, DFEVar FirstOutput)
@@ -598,8 +598,11 @@ class MovingAverageSimpleKernel extends Kernel
 
 					IsOutputPoint |= PadEnable;
 
+
 					// Output Points
 					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(OutDims[0] * OutDims[1] * OutDims[1] + BurstMult*BurstSizeDataType))
+					.withMax(OutDims[0] * OutDims[1] * OutDims[1] + (BurstMult*BurstSizeDataType) - 1)
+					.withWrapMode(WrapMode.STOP_AT_MAX)
 					.withInitValue(1)
 					.withEnable(Enable > 0 & IsOutputPoint);
 					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
@@ -612,7 +615,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// ---------- 		Input Control		-------- //
 					// --------------------------------------------- //
 
-					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutPointTicks < FirstOutput + 2 + (BurstSizeDataType*BurstMult));
+					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & (OutPointTicks < FirstOutput + 2 + (BurstSizeDataType*BurstMult) | TickCount < InDims[0]*InDims[1]*InDims[1] + Padding));
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -721,6 +724,8 @@ class MovingAverageSimpleKernel extends Kernel
 
 					// Output Points
 					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(BurstMult * BurstSizeDataType) + 1)
+					.withMax((BurstMult*BurstSizeDataType))
+					.withWrapMode(WrapMode.STOP_AT_MAX)
 					.withEnable(Enable > 0 & DataOutEnable);
 					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
 					DFEVar OutPointTicks = OutPointCounter.getCount().cast(dfeUInt(32));
@@ -731,7 +736,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// ---------- 		Input Control		---------//
 					// --------------------------------------------- //
 
-					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutputTicks.eq(0) & OutPointTicks < BurstMult*BurstSizeDataType);
+					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutputTicks.eq(0) & (OutPointTicks < BurstMult*BurstSizeDataType | TickCount < BurstMult*BurstSizeDataType));
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//

@@ -388,9 +388,6 @@
 										}
 										else
 										{
-											//LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-											//LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-
 											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 1 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
 											LayerCalls[Layer][1] = LayerCalls[Layer - 1][1] + 1;
 										}
@@ -411,7 +408,7 @@
 											}
 											else
 											{
-												LayerCalls[Layer][0] = LayerCalls[Layer - 1][0] + 1;
+												LayerCalls[Layer][0] = LayerCalls[Layer - 1][0] + 3;
 											}*/
 										}
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + (int)(ceil(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2] / (float) OutputSize) * ceil(Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
