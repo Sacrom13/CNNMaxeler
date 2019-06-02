@@ -26,7 +26,7 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddActi(ReLu);
 	AddConv(16, 3, 1, 0, 4);
 	AddActi(ReLu);
-	AddPool(2, MaxPool, 2, 1);
+	AddPool(2, MaxPool, 2);
 	/*AddFcon(1000, 1);
 	AddActi(ReLu);*/
 
@@ -37,7 +37,7 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddActi(ReLu);
 	AddConv(64, 3, 1, 1, 1);
 	AddActi(ReLu);
-	AddPool(2, MaxPool, 2, 1);*/
+	AddPool(2, MaxPool, 2);*/
 
 	AddBlock(Net);
 	AddFcon(100, 1);
@@ -60,7 +60,6 @@ int main()
 	int InDims[3] = {3, 29, 29};
 
 	CreateTestNetwork(Net, InDims);
-	//CreateVGG16(Net);
 
 	double*** Input = Init3D(InDims);
 	RandomizeArray3D(Input, InDims, 0, 5);

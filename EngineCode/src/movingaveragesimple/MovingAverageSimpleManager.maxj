@@ -138,13 +138,6 @@ class MovingAverageSimpleManager extends CustomManager
 		{
 			super(engineParams);
 
-			// Setup Kernel and pass All Params
-			KernelBlock K = addKernel(new MovingAverageSimpleKernel(makeKernelParameters("Kernel"),
-																	Layers,
-																	Dims, Params, Parallelism, Padding,
-																	WeightDims,
-																	BurstMult));
-
 			// Lmem Interface
 			LMemInterface LMem = addLMemInterface();
 
@@ -155,6 +148,14 @@ class MovingAverageSimpleManager extends CustomManager
 			DFELink tocpu = addStreamToCPU("DataOut");
 			cpu2lmem <== fromcpu;
 			tocpu <== lmem2cpu;
+
+			// Setup Kernel and pass All Params
+				KernelBlock K = addKernel(new MovingAverageSimpleKernel(makeKernelParameters("Kernel"),
+											Layers,
+											Dims, Params, Parallelism, Padding,
+											WeightDims,
+											BurstMult));
+
 
 			// Linking Kernel Inputs and Outputs to LMem
 			for(int Layer = 0; Layer < Layers.length; ++Layer)
@@ -195,6 +196,7 @@ class MovingAverageSimpleManager extends CustomManager
 					Ei.setLMemLinear("DataInWrite", Start * DataType.sizeInBytes(), Size * DataType.sizeInBytes());			// Write Data
 
 					// This shouldn't have to be here, but ignoreAll isn't working properly
+					// This shouldn't have to be here, but ignoreAll isn't working properly
 					for(int i = 0; i < WeightDims; ++i)
 					{
 						Ei.setMem("Kernel", "Weights", i, (double) 0);
@@ -226,6 +228,7 @@ class MovingAverageSimpleManager extends CustomManager
 						Ei.setMem("Kernel", "Weights", i, (double) 0);
 					}
 
+
 					// Ignore Everything that's not used in this Interface
 					Ei.ignoreAll(Direction.IN_OUT);
 					return Ei;
@@ -237,7 +240,7 @@ class MovingAverageSimpleManager extends CustomManager
 
 			private static EngineInterface RunForward()
 			{
-				EngineInterface Ei = new EngineInterface("RunForward");
+				EngineInterface Ei = new EngineInterface("RunForwardBlock");
 
 				// Amount of Ticks Kernel will run for
 				Ei.setTicks("Kernel", Integer.MAX_VALUE);
@@ -258,7 +261,6 @@ class MovingAverageSimpleManager extends CustomManager
 
 					// Offset in LMem of where Input Starts
 					InterfaceParam InputOffset = Ei.addParam("InputOffset", CPUTypes.UINT32);
-
 
 				// --------------------------------------------- //
 				// ---------- 		LayerSetup 		   ----------//
@@ -303,7 +305,7 @@ class MovingAverageSimpleManager extends CustomManager
 											Ei.setLMemLinearWrapped("Input" + Layer,
 																	InputOffset + Ei.addConstant(MemStart),
 																	Ei.addConstant(TotalMemSize),
-																	(MemControl[Layer] > 0 ? 1 : 0) * (TotalMemSize + OutputSizeBytes),
+																	(MemControl[Layer] > 0 ? 1 : 0) * (TotalMemSize + 2*OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
@@ -377,202 +379,226 @@ class MovingAverageSimpleManager extends CustomManager
 				*/
 			}
 
-	// 4 --- Read Params --- //
+	// 4 --- File Readers --- //
 
-		private static void ReadParams()
-		{
-			try
+		// 4.1 --- Read Block File --- //
+
+			private static void ReadParams(String Filename)
 			{
-
-				// Read Layer File
-				BufferedReader br;											// Reader to the File
-				br = new BufferedReader(new FileReader("layers.txt"));		// Open Layer File
-				String Line;												// Read Line
-				String Aux[];												// Split the Line into all the values
-
-				// Auxiliary Variables to read, so we can later
-				// Call .length and get Correct Results with Real Variables
-				int[] LayersAux = new int[MaxBlockSize];
-				int[][] DimsAux = new int[MaxBlockSize][2];
-				float[][] ParamsAux = new float[MaxBlockSize][MaxParams];
-				int[] ParallelismAux = new int[MaxBlockSize];
-
-				// Count number of Layers
-				int LayerCount = 0;
-
-			    while ((Line = br.readLine()) != null)
-			    {
-			    	Aux = Line.split(" ");
-			    	LayersAux[LayerCount] = Integer.parseInt(Aux[0]);			// First Value is Layer Type
-			    	ParallelismAux[LayerCount] = Integer.parseInt(Aux[1]);		// Second Value is Parallelism
-
-			    	int i = 0;
-			    	switch(LayersAux[LayerCount])
-			    	{
-			    		case 0:		// Block Output Dims + BurstMult
-			    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[1]);		// Channel
-			    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[2]);		// X
-			    				BurstMult = Integer.parseInt(Aux[3]);					// Burst Multiplier
-
-			    				OutputSizeDataType = BurstMult * BurstSizeDataType;
-			    				OutputSizeBytes = OutputSizeDataType * DataType.sizeInBytes();
-			    				break;
-
-			    		case Conv:
-
-			    				// Get Layer Params
-			    				for(i = 0; i < 5; ++i)
-			    				{
-			    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 2]);
-			    				}
-
-			    				// Input Dims for this Layer
-			    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+2]);
-			    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+3]);
-
-			    				break;
-
-			    		case Pool:
-
-			    				// Get Layer Params
-				    			for(i = 0; i < 4; ++i)
-			    				{
-			    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 2]);
-			    				}
-				    			// Input Dims for this Layer
-								DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+2]);
-								DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+3]);
-
-		    					break;
-
-			    		case Fcon:
-
-			    				// Get Layer Params
-				    			for(i = 0; i < 1; ++i)
-			    				{
-			    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 2]);
-			    				}
-
-				    			// Input Dims for this Layer
-				    			DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+2]);
-				    			DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+3]);
-		    					break;
-			    	}
-			    	LayerCount++;		// Count Number of Layers
-
-			    }
-
-			    // Init in Proper Variables, now that we know layercount
-
-				Layers = new int[LayerCount - 1];
-				Dims = new int[LayerCount][2];
-			    Params = new double[LayerCount - 1][MaxParams];
-			    Parallelism = new int[LayerCount - 1];
-
-				WeightDims = 0;
-
-				Padding = new int[LayerCount];
-
-			    Dims[0][0] = DimsAux[0][0];
-			    Dims[0][1] = DimsAux[0][1];
-
-			    int TotalMemSize = (Dims[0][0] * Dims[0][1] * Dims[0][1]);
-		    	if(Dims[0][0] == 1)
-		    	{
-		    		TotalMemSize /= Dims[0][1];
-		    	}
-				if(TotalMemSize % OutputSizeDataType != 0)
+				try
 				{
-					Padding[0] = (OutputSizeDataType - (TotalMemSize % OutputSizeDataType));
-				}
-				else
-				{
-					Padding[0] = 0;
-				}
 
-			    // Cycle to Copy Params. layercount - 1 Because of the extra Output Layer (0), that only has Output Dims
-			    for(int i = 0; i < LayerCount - 1; i++)
-			    {
-			    	// Copy Layer Params
-			    	for(int j = 0; j < MaxParams; j++)
+					// Read Layer File
+					BufferedReader br;											// Reader to the File
+					br = new BufferedReader(new FileReader(Filename));		// Open Layer File
+					String Line;												// Read Line
+					String Aux[];												// Split the Line into all the values
+
+					// Auxiliary Variables to read, so we can later
+					// Call .length and get Correct Results with Real Variables
+					int[] LayersAux = new int[MaxBlockSize];
+					int[][] DimsAux = new int[MaxBlockSize][2];
+					float[][] ParamsAux = new float[MaxBlockSize][MaxParams];
+					int[] ParallelismAux = new int[MaxBlockSize];
+
+					// Count number of Layers
+					int LayerCount = 0;
+
+				    while ((Line = br.readLine()) != null)
+				    {
+				    	Aux = Line.split(" ");
+				    	LayersAux[LayerCount] = Integer.parseInt(Aux[0]);			// First Value is Layer Type
+				    	ParallelismAux[LayerCount] = Integer.parseInt(Aux[1]);		// Second Value is Parallelism
+
+				    	int i = 0;
+				    	switch(LayersAux[LayerCount])
+				    	{
+				    		case 0:		// Block Output Dims + BurstMult
+				    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[1]);				// Channel
+				    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[2]);				// X
+				    				BurstMult = Integer.parseInt(Aux[3]);							// Burst Multiplier
+
+				    				OutputSizeDataType = BurstMult * BurstSizeDataType;
+				    				OutputSizeBytes = OutputSizeDataType * DataType.sizeInBytes();
+				    				break;
+
+				    		case Conv:
+
+				    				// Get Layer Params
+				    				for(i = 0; i < 5; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 2]);
+				    				}
+
+				    				// Input Dims for this Layer
+				    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+2]);
+				    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+3]);
+
+				    				break;
+
+				    		case Pool:
+
+				    				// Get Layer Params
+					    			for(i = 0; i < 4; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 2]);
+				    				}
+					    			// Input Dims for this Layer
+									DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+2]);
+									DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+3]);
+
+			    					break;
+
+				    		case Fcon:
+
+				    				// Get Layer Params
+					    			for(i = 0; i < 1; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 2]);
+				    				}
+
+					    			// Input Dims for this Layer
+					    			DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+2]);
+					    			DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+3]);
+			    					break;
+				    	}
+				    	LayerCount++;		// Count Number of Layers
+
+				    }
+
+				    // Init in Proper Variables, now that we know layercount
+
+					Layers = new int[LayerCount - 1];
+					Dims = new int[LayerCount][2];
+				    Params = new double[LayerCount - 1][MaxParams];
+				    Parallelism = new int[LayerCount - 1];
+
+					WeightDims = 0;
+
+					Padding = new int[LayerCount];
+
+				    Dims[0][0] = DimsAux[0][0];
+				    Dims[0][1] = DimsAux[0][1];
+
+				    int TotalMemSize = (Dims[0][0] * Dims[0][1] * Dims[0][1]);
+			    	if(Dims[0][0] == 1)
 			    	{
-			    		Params[i][j] = ParamsAux[i][j];
-			    	}
-
-			    	// Copy Dims
-			    	Dims[i + 1][0] = DimsAux[i + 1][0];
-			    	Dims[i + 1][1] = DimsAux[i + 1][1];
-
-			    	// Copy Layer Type and Parallelism
-			    	Layers[i] = LayersAux[i];
-			    	Parallelism[i] = ParallelismAux[i];
-
-			    	switch(Layers[i])
-			    	{
-			    			case Conv:
-										if((2 * Dims[i][0] * Params[i][2] * Params[i][2]) > WeightDims)
-										{
-											WeightDims = (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
-										}
-					    				break;
-
-			    			case Pool :
-					    				break;
-
-			    			case Fcon:
-			    						if(Math.pow(BurstMult*BurstSizeDataType, 2) > WeightDims)
-			    						{
-			    							WeightDims = (int) Math.pow(BurstMult*BurstSizeDataType, 2);
-			    						}
-					    				break;
-			    	}
-
-			    	// Calculate Padding
-			    	TotalMemSize = (Dims[i + 1][0] * Dims[i + 1][1] * Dims[i + 1][1]);
-			    	if(Dims[i + 1][0] == 1)
-			    	{
-			    		TotalMemSize /= Dims[i + 1][1];
+			    		TotalMemSize /= Dims[0][1];
 			    	}
 					if(TotalMemSize % OutputSizeDataType != 0)
 					{
-						Padding[i + 1] = (OutputSizeDataType - (TotalMemSize % OutputSizeDataType));
+						Padding[0] = OutputSizeDataType - (TotalMemSize % OutputSizeDataType);
 					}
 					else
 					{
-						Padding[i + 1] = 0;
+						Padding[0] = 0;
 					}
-			    }
 
+				    // Cycle to Copy Params. layercount - 1 Because of the extra Output Layer (0), that only has Output Dims
+				    for(int i = 0; i < LayerCount - 1; i++)
+				    {
+				    	// Copy Layer Params
+				    	for(int j = 0; j < MaxParams; j++)
+				    	{
+				    		Params[i][j] = ParamsAux[i][j];
+				    	}
 
-			    br = new BufferedReader(new FileReader("params.txt"));
-			    Aux = br.readLine().split(" ");
-			    LMemFreq = Integer.parseInt(Aux[0]);
-			    DesignFreq = Integer.parseInt(Aux[1]);
-			    Pipelining = Integer.parseInt(Aux[2]);
+				    	// Copy Dims
+				    	Dims[i + 1][0] = DimsAux[i + 1][0];
+				    	Dims[i + 1][1] = DimsAux[i + 1][1];
+
+				    	// Copy Layer Type and Parallelism
+				    	Layers[i] = LayersAux[i];
+				    	Parallelism[i] = ParallelismAux[i];
+
+				    	switch(Layers[i])
+				    	{
+				    			case Conv:
+											if((2 * Dims[i][0] * Params[i][2] * Params[i][2]) > WeightDims)
+											{
+												WeightDims = (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
+											}
+						    				break;
+
+				    			case Pool :
+						    				break;
+
+				    			case Fcon:
+				    						if(Math.pow(BurstMult*BurstSizeDataType, 2) > WeightDims)
+				    						{
+				    							WeightDims = (int) Math.pow(BurstMult * BurstSizeDataType, 2);
+				    						}
+						    				break;
+				    	}
+
+				    	// Calculate Padding
+				    	TotalMemSize = (Dims[i + 1][0] * Dims[i + 1][1] * Dims[i + 1][1]);
+				    	if(Dims[i + 1][0] == 1)
+				    	{
+				    		TotalMemSize /= Dims[i + 1][1];
+				    	}
+						if(TotalMemSize % OutputSizeDataType != 0)
+						{
+							Padding[i + 1] = (OutputSizeDataType - (TotalMemSize % OutputSizeDataType));
+						}
+						else
+						{
+							Padding[i + 1] = 0;
+						}
+				    }
+				}
+				catch (FileNotFoundException e)
+				{
+
+				}
+				catch (IOException e)
+				{
+
+				}
 			}
-			catch (FileNotFoundException e)
+
+		// 4.2 --- Read DFEParams File --- //
+
+			private static void ReadDFEParams()
 			{
+				BufferedReader br;
+				try
+				{
+					br = new BufferedReader(new FileReader("params.txt"));
+					String[] Aux = br.readLine().split(" ");
+				    LMemFreq = Integer.parseInt(Aux[0]);
+				    DesignFreq = Integer.parseInt(Aux[1]);
+				    Pipelining = Integer.parseInt(Aux[2]);
+				}
+				catch (FileNotFoundException e1)
+				{
+
+				}
+				catch (IOException e)
+				{
+
+				}
 
 			}
-			catch (IOException e)
-			{
-
-			}
-		}
 
 	// 5 --- Main --- //
 
 		public static void main(String[] args)
 		{
-			ReadParams();
+			ReadDFEParams();
+
+			String Filename = "layers0.txt";
+			ReadParams(Filename);
 
 			EngineParameters params = new EngineParameters(args);
 			MovingAverageSimpleManager m = new MovingAverageSimpleManager(params);
 
 			// Set Pipelining
-			KernelConfiguration currKConf = m.getCurrentKernelConfig();
-			currKConf.optimization.setCEPipelining(Pipelining);
+			KernelConfiguration CurrKConf = m.getCurrentKernelConfig();
+			CurrKConf.optimization.setCEPipelining(Pipelining);
 			//m.setCurrentKernelConfig(currKConf);
+
+			//m.config.setOnCardMemoryFrequency(LMemFreq);
 
 			// set clock frequency
 			m.setDefaultStreamClockFrequency(DesignFreq);
@@ -583,6 +609,7 @@ class MovingAverageSimpleManager extends CustomManager
 			m.createSlicInterface(InterfaceWrite());				// Write to LMem
 			m.createSlicInterface(InterfaceRead());					// Read to LMem
 			m.createSlicInterface(RunForward());					// Run ForwardProp
+
 			m.createSlicInterface(RunBackward()); 					// Run Backprop
 
 			// Build Manager.

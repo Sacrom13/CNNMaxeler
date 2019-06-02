@@ -109,7 +109,7 @@
 			return value - nothing
 		*/
 
-		static void WriteLayers(Block Block)
+		static void WriteLayers(Block Block, char* Filename)
 		{
 			FILE *fp;
 
@@ -123,7 +123,7 @@
 
 			// --- Open File --- //
 
-				fp = fopen("layers.txt", "w+");
+				fp = fopen(Filename, "w+");
 				if(fp == NULL)
 				{
 					printf("File opening Error.\n");
@@ -941,9 +941,6 @@
 	
 	static void BlockForwardDFE(Block Block)
 	{
-		// Write Block info
-		WriteLayers(Block);
-
 		// --------------------------------------------- //
 		// ----------     	Basic Static	   ----------//
 		// --------------------------------------------- //
@@ -958,7 +955,7 @@
 				printf("Running Call %d/%d.\n", CurrentCall + 1, Block.FParams.NCalls);
 
 				// Running Blocking version.
-				MovingAverageSimple_RunForward(
+				MovingAverageSimple_RunForwardBlock(
 						Block.FParams.InputOffset,
 						Block.FParams.FirstOutputs[CurrentCall],
 						Block.FParams.MemControl[CurrentCall],
@@ -985,7 +982,7 @@
 			// Init Max File
 			printf("Loading Max File!\n");
 			max_file_t *File = MovingAverageSimple_init();
-			max_engine_t *Engine = max_load(File, "local:*");
+			max_engine_t *Engine = max_load(File, '*');
 			printf("Max File Loaded!\n");
 
 			// --------------------------------------------- //
@@ -1037,10 +1034,18 @@
 
 			printf("Running DFE\n");
 
+			char* Filename = malloc(sizeof(char) * 10);
+			Filename = "layers0.txt";
+
 			StartTiming();
 			for(int Block = 0; Block < 1; ++Block)
 			{
+				// Write Block info
+				WriteLayers(Net.Blocks[Block], Filename);
+
 				BlockForwardDFE(Net.Blocks[Block]);
+
+				Filename = "layers1.txt";
 			}
 			printf("DFE Finished. Time Taken = %.2f milliseconds\n", StopTiming()/1000);
 

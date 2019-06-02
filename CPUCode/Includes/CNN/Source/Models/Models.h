@@ -12,7 +12,7 @@
 
 		void AddBlock(Network* Net);
 		void AddConv(int NKernels, char KernelSize, char Stride, char Padding, char Parallelism);
-		void AddPool(char FilterSize, char Type, char Stride, char Parallelism);
+		void AddPool(char FilterSize, char Type, char Stride);
 		void AddFcon(int OutputSize, char Parallelism);
 		void AddActi(char Func);
 		void AddDrop(double DropP);

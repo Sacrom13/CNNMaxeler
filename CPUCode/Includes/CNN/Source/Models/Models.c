@@ -302,6 +302,13 @@
 										exit(CNNConstructionError);
 									}
 
+									// Check if Parallelism is allowed
+									if(Net->Blocks[Block].FParams.Parallelism[Layer] > OutputSize/2)
+									{
+										printf("Fcon Layer %d in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+										printf("Parallelism (%d), cannot be greater than BurstMult*24/2(%d)\n", Net->Blocks[Block].FParams.Parallelism[Layer], OutputSize/2);
+									}
+
 									break;
 					}
 				}
@@ -371,8 +378,6 @@
 											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
 										}
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-										printf("ConvCalls[0] = %d\n", LayerCalls[Layer][0]);
-										printf("ConvCalls[1] = %d\n", LayerCalls[Layer][1]);
 										break;
 
 							case Pool:
@@ -383,14 +388,11 @@
 										}
 										else
 										{
-											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-											LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+											//LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
+											//LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
 
-											//LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 1 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-											//LayerCalls[Layer][1] = LayerCalls[Layer - 1][1] + 1;
-
-											printf("PoolCalls[0] = %d\n", LayerCalls[Layer][0]);
-											printf("PoolCalls[1] = %d\n", LayerCalls[Layer][1]);
+											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 1 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+											LayerCalls[Layer][1] = LayerCalls[Layer - 1][1] + 1;
 										}
 
 										break;
@@ -413,9 +415,6 @@
 											}*/
 										}
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + (int)(ceil(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2] / (float) OutputSize) * ceil(Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-
-										printf("FconCalls[0] = %d\n", LayerCalls[Layer][0]);
-										printf("FconCalls[1] = %d\n", LayerCalls[Layer][1]);
 										break;
 						}
 					}
@@ -738,7 +737,7 @@
 				KernelSize - Size of Kernels in this Layer
 				Stride - Amount of Pixels Kernel Moves at a time
 				Padding - Amount of Pixels Added to Input Volume before Computation
-				Parallelism - How many Outputs ( In Multiples of 24 ) are Calculated each time the DFE is Ran. Para = 1 means 48 Outputs. If NOutputs < 48 then just make this Param 1
+				Parallelism - How many Channels are calculated at once.
 
 				return value - nothing
 			*/
@@ -789,6 +788,21 @@
 					{
 						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
 						printf("Padding has to be less than Kernel Size.\n");
+						exit(CNNConstructionError);
+					}
+
+					if((CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0] % Parallelism) != 0)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Input has %d Channels, which does not divide into Parallelism ( %d ) with remainder 0.", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0], Parallelism);
+						exit(CNNConstructionError);
+					}
+
+					if((CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0] % Parallelism) != 0)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Parallelism (%d) cannot be greater than InputChannels/2 (%d).", Parallelism, (int)(CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0] / (float)2));
+						exit(CNNConstructionError);
 					}
  
 				// --- Set Layer and Parallelism level --- //
@@ -898,12 +912,11 @@
 				FilterSize - Size of Pooling Window
 				Type - Type of Pooling
 				Stride - Amount of Pixels Kernel Moves at a time
-				Parallelism - How many Outputs ( In Multiples of 48 ) are Calculated each time the DFE is Ran. Para = 1 means 48 Outputs. If NOutputs < 48 then just make this Param 1
 
 				return value - nothing
 			*/
 
-			void AddPool(char FilterSize, char Type, char Stride, char Parallelism)
+			void AddPool(char FilterSize, char Type, char Stride)
 			{
 				// --- Check if CNNInit has been called --- //
 
@@ -963,7 +976,7 @@
 					}
 
 					CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = Pool;
-					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = Parallelism;
+					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = 1;
 
 				// --- Set Params --- //
 
@@ -1282,10 +1295,10 @@
 			AddBlock(Net);
 			AddConv(96, 11, 4, 0, 1);
 			AddActi(ReLu);
-			AddPool(3, MaxPool, 2, 1);
+			AddPool(3, MaxPool, 2);
 			AddConv(256, 5, 1, 2, 1);
 			AddActi(ReLu);
-			AddPool(3, MaxPool, 2, 1);
+			AddPool(3, MaxPool, 2);
 			
 			AddBlock(Net);
 			AddConv(384, 3, 1, 1, 1);
@@ -1293,7 +1306,7 @@
 			AddConv(384, 3, 1, 1, 1);
 			AddActi(ReLu);
 			AddConv(256, 3, 1, 1, 1);
-			AddPool(3, MaxPool, 2, 1);
+			AddPool(3, MaxPool, 2);
 
 			AddBlock(Net);
 			AddFcon(4096, 1);
@@ -1327,14 +1340,14 @@
 			AddActi(ReLu);
 			AddConv(64, 3, 1, 1, 1);
 			AddActi(ReLu);
-			AddPool(2, MaxPool, 2, 1);
+			AddPool(2, MaxPool, 2);
 			
 			AddBlock(Net);
 			AddConv(128, 3, 1, 1, 1);
 			AddActi(ReLu);
 			AddConv(128, 3, 1, 1, 1);
 			AddActi(ReLu);
-			AddPool(2, MaxPool, 2, 1);
+			AddPool(2, MaxPool, 2);
 
 			AddBlock(Net);
 			AddConv(256, 3, 1, 1, 1);
@@ -1343,7 +1356,7 @@
 			AddActi(ReLu);
 			AddConv(256, 3, 1, 1, 1);
 			AddActi(ReLu);
-			AddPool(2, MaxPool, 2, 1);
+			AddPool(2, MaxPool, 2);
 
 			AddBlock(Net);
 			AddConv(512, 3, 1, 1, 1);
@@ -1352,7 +1365,7 @@
 			AddActi(ReLu);
 			AddConv(512, 3, 1, 1, 1);
 			AddActi(ReLu);
-			AddPool(2, MaxPool, 2, 1);
+			AddPool(2, MaxPool, 2);
 
 			AddBlock(Net);
 			AddFcon(4096, 1);
