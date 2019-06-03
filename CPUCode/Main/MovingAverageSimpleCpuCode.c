@@ -47,7 +47,7 @@ void CreateTestNetwork(Network* Net, int* InDims)
 
 	//SetBurstMult(Net, 0, 2048);
 
-	SetBurstMult(Net, 0, 3);
+	SetBurstMult(Net, 0, 8);
 }
 
 int main()

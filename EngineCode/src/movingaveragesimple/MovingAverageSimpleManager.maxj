@@ -325,7 +325,7 @@ class MovingAverageSimpleManager extends CustomManager
 											Ei.setLMemLinearWrapped("Input" + Layer,
 																	InputOffset + MemStart + (FirstOutputs[Layer] * BurstSizeBytes * BurstMult),
 																	Ei.addConstant(BurstMult * BurstSizeBytes),
-																	(MemControl[Layer] > 0 ? 1 : 0) * (int)(Math.pow(BurstMult * BurstSizeDataType, 2)* DataType.sizeInBytes() + OutputSizeBytes),
+																	(MemControl[Layer] > 0 ? 1 : 0) * (BurstMult*BurstSizeBytes + OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;

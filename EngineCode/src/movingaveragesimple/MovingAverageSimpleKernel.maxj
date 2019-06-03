@@ -64,83 +64,82 @@ class MovingAverageSimpleKernel extends Kernel
 
 	// 2 --- Constructor--- //
 
-	MovingAverageSimpleKernel(KernelParameters parameters,
-							int[] Layers,
-							int[][] Dims, double[][] Params, int[] Parallelism, int[] Padding,
-							int WeightDims,
-							int BurstMult)
-	{
-		super(parameters);
-
-		// TickCounter
-		DFEVar TickCount = control.count.simpleCounter(32);
-
-		// Get Weights
-		Memory<DFEVar> Weights = mem.alloc(IODataType, WeightDims);
-		Weights.mapToCPU("Weights");
-
-		int WeightBits = MathUtils.bitsToAddress(WeightDims);
-
-		// --------------------------------------------- //
-		// ----------	  Layer Computation    ----------//
-		// --------------------------------------------- //
-
-		for(int Layer = 0; Layer < Layers.length; ++Layer)
+		MovingAverageSimpleKernel(KernelParameters parameters,
+								int[] Layers,
+								int[][] Dims, double[][] Params, int[] Parallelism, int[] Padding,
+								int WeightDims,
+								int BurstMult)
 		{
+			super(parameters);
+
+			// TickCounter
+			DFEVar TickCount = control.count.simpleCounter(32);
+
+			// Get Weights
+			Memory<DFEVar> Weights = mem.alloc(ComputationDataType, WeightDims);
+			Weights.mapToCPU("Weights");
+
+			int WeightBits = MathUtils.bitsToAddress(WeightDims);
+
 			// --------------------------------------------- //
-			// ---------- 		Get Params 		   ----------//
+			// ----------	  Layer Computation    ----------//
 			// --------------------------------------------- //
 
-			// Get First Output Point
-
-				DFEVar FirstOutput = io.scalarInput("FirstOutput" + Layer, dfeUInt(32));
-
-			// Mem Control
-
-				DFEVar MemControl = io.scalarInput("MemControl" + Layer, dfeUInt(32));
-
-				debug.simPrintf(TickCount.eq(0),"\tMemControl[%d] = %d\n", Layer, MemControl);
-
-			switch(Layers[Layer])
+			for(int Layer = 0; Layer < Layers.length; ++Layer)
 			{
-				case Conv:
-							ConvForward(TickCount, Layer,
-										Parallelism[Layer], Params[Layer], Padding[Layer],
-										Dims[Layer], Dims[Layer + 1],
-										BurstMult,
-										Weights, WeightBits,
-										MemControl, FirstOutput);
-							break;
-				case Pool:
-							if(Params[Layer][2] == MaxPool)
-							{
-								MaxPoolForward(TickCount, Layer,
+				// --------------------------------------------- //
+				// ---------- 		Get Params 		   ----------//
+				// --------------------------------------------- //
+
+				// Get First Output Point
+
+					DFEVar FirstOutput = io.scalarInput("FirstOutput" + Layer, dfeUInt(32));
+
+				// Mem Control
+
+					DFEVar MemControl = io.scalarInput("MemControl" + Layer, dfeUInt(32));
+
+					debug.simPrintf(TickCount.eq(0),"\tMemControl[%d] = %d\n", Layer, MemControl);
+
+				switch(Layers[Layer])
+				{
+					case Conv:
+								ConvForward(TickCount, Layer,
+											Parallelism[Layer], Params[Layer], Padding[Layer],
+											Dims[Layer], Dims[Layer + 1],
+											BurstMult,
+											Weights, WeightBits,
+											MemControl, FirstOutput);
+								break;
+					case Pool:
+								if(Params[Layer][2] == MaxPool)
+								{
+									MaxPoolForward(TickCount, Layer,
+													Parallelism[Layer], Params[Layer], Padding[Layer],
+													Dims[Layer], Dims[Layer + 1],
+													BurstMult,
+													MemControl, FirstOutput);
+								}
+								else if(Params[Layer][2] == MeanPool)
+								{
+									MeanPoolForward(TickCount, Layer,
 												Parallelism[Layer], Params[Layer], Padding[Layer],
 												Dims[Layer], Dims[Layer + 1],
 												BurstMult,
 												MemControl, FirstOutput);
-							}
-							else if(Params[Layer][2] == MeanPool)
-							{
-								MeanPoolForward(TickCount, Layer,
+								}
+								break;
+					case Fcon:
+								FconForward(TickCount, Layer,
 											Parallelism[Layer], Params[Layer], Padding[Layer],
 											Dims[Layer], Dims[Layer + 1],
 											BurstMult,
+											Weights, WeightBits,
 											MemControl, FirstOutput);
-							}
-							break;
-				case Fcon:
-							FconForward(TickCount, Layer,
-										Parallelism[Layer], Params[Layer], Padding[Layer],
-										Dims[Layer], Dims[Layer + 1],
-										BurstMult,
-										Weights, WeightBits,
-										MemControl, FirstOutput);
-							break;
+								break;
+				}
 			}
 		}
-	}
-
 
 	// 3 --- Layer Computation --- //
 
@@ -723,7 +722,7 @@ class MovingAverageSimpleKernel extends Kernel
 										   ( (InputTicks.eq(BurstSizeDataType * BurstMult/Parallelism - 1))));
 
 					// Output Points
-					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(BurstMult * BurstSizeDataType) + 1)
+					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(BurstMult * BurstSizeDataType))
 					.withMax((BurstMult*BurstSizeDataType))
 					.withWrapMode(WrapMode.STOP_AT_MAX)
 					.withEnable(Enable > 0 & DataOutEnable);
@@ -736,7 +735,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// ---------- 		Input Control		---------//
 					// --------------------------------------------- //
 
-					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutputTicks.eq(0) & (OutPointTicks < BurstMult*BurstSizeDataType | TickCount < BurstMult*BurstSizeDataType));
+					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutputTicks.eq(0) & (OutPointTicks < BurstMult*BurstSizeDataType | TickCount < BurstMult*BurstSizeDataType + InputPadding));
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -753,7 +752,6 @@ class MovingAverageSimpleKernel extends Kernel
 
 							// Read input data from LMem
 							DFEVar Data = stream.offset(Input, DataOffset).cast(ComputationDataType);
-
 
 							// Get Weight
 

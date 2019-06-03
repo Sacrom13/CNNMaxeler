@@ -294,11 +294,11 @@
 
 									break;
 						case Fcon:
-									if(BM > 3)
+									if(BM > 8)
 									{
 										printf("Cannot set BurstSize.\n");
 										printf("Layer %d(Fcon) in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-										printf("Blocks with Fcon Layers must have BurstMult < 4\n");
+										printf("Blocks with Fcon Layers must have BurstMult < 7\n");
 										exit(CNNConstructionError);
 									}
 
@@ -408,7 +408,7 @@
 											}
 											else
 											{
-												LayerCalls[Layer][0] = LayerCalls[Layer - 1][0] + 3;
+												LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] - 1;
 											}*/
 										}
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + (int)(ceil(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2] / (float) OutputSize) * ceil(Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
@@ -1050,7 +1050,7 @@
 				Add an Fcon Layer to the Current Block
 
 				Output Size - Amount of Output Neurons
-				Parallelism - How many Outputs ( In Multiples of 24 ) are Calculated each time the DFE is Ran. Para = 1 means 48 Outputs. If NOutputs < 48 then just make this Param 1
+				Parallelism - How fast computation is done
 
 				return value - nothing
 			*/
