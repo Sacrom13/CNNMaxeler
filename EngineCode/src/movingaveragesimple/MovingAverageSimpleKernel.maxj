@@ -52,15 +52,15 @@ class MovingAverageSimpleKernel extends Kernel
 
 		// 1.2 --- Data Types --- //
 
-		private static final DFEFloat IODataType = dfeFloat(11, 53);			// Need to input/output as double and then cast to get correct results
-		private static final DFEFloat ComputationDataType = dfeFloat(8, 24);	// Number precision used when doing calculation
+			private static final DFEFloat IODataType = dfeFloat(11, 53);			// Need to input/output as double and then cast to get correct results
+			private static final DFEFloat ComputationDataType = dfeFloat(8, 24);	// Number precision used when doing calculation
 
-		private static final CPUTypes DataType = CPUTypes.DOUBLE;
+			private static final CPUTypes DataType = CPUTypes.DOUBLE;
 
 		// 1.3 --- Burst Size Settings --- //
 
-		private static final int BurstSizeBytes = 192;												// Burst Size in Bytes, implicit for Galava DFE
-		private static final int BurstSizeDataType = BurstSizeBytes/DataType.sizeInBytes();			// Burst Size in Doubles
+			private static final int BurstSizeBytes = 192;												// Burst Size in Bytes, implicit for Galava DFE
+			private static final int BurstSizeDataType = BurstSizeBytes/DataType.sizeInBytes();			// Burst Size in Doubles
 
 	// 2 --- Constructor--- //
 
@@ -81,6 +81,9 @@ class MovingAverageSimpleKernel extends Kernel
 
 			int WeightBits = MathUtils.bitsToAddress(WeightDims);
 
+			// Weight Offset
+			DFEVar WeightArrayOffset = constant.var(0);
+
 			// --------------------------------------------- //
 			// ----------	  Layer Computation    ----------//
 			// --------------------------------------------- //
@@ -99,7 +102,7 @@ class MovingAverageSimpleKernel extends Kernel
 
 					DFEVar MemControl = io.scalarInput("MemControl" + Layer, dfeUInt(32));
 
-					debug.simPrintf(TickCount.eq(0),"\tMemControl[%d] = %d\n", Layer, MemControl);
+					//debug.simPrintf(TickCount.eq(0),"\tMemControl[%d] = %d\n", Layer, MemControl);
 
 				switch(Layers[Layer])
 				{
@@ -108,8 +111,10 @@ class MovingAverageSimpleKernel extends Kernel
 											Parallelism[Layer], Params[Layer], Padding[Layer],
 											Dims[Layer], Dims[Layer + 1],
 											BurstMult,
-											Weights, WeightBits,
+											Weights, WeightBits, WeightArrayOffset,
 											MemControl, FirstOutput);
+
+								WeightArrayOffset += ((MemControl > 0).cast(dfeUInt(16)) * 2 * Dims[Layer][0] * Params[Layer][2] * Params[Layer][2]);
 								break;
 					case Pool:
 								if(Params[Layer][2] == MaxPool)
@@ -134,8 +139,10 @@ class MovingAverageSimpleKernel extends Kernel
 											Parallelism[Layer], Params[Layer], Padding[Layer],
 											Dims[Layer], Dims[Layer + 1],
 											BurstMult,
-											Weights, WeightBits,
+											Weights, WeightBits, WeightArrayOffset,
 											MemControl, FirstOutput);
+
+								WeightArrayOffset += ((MemControl > 0).cast(dfeUInt(16)) * Math.pow(BurstMult*BurstSizeDataType,2));
 								break;
 				}
 			}
@@ -151,7 +158,7 @@ class MovingAverageSimpleKernel extends Kernel
 										 int Parallelism, double[] Params, int Padding,
 										 int[] InDims, int[] OutDims,
 										 int BurstMult,
-										 Memory<DFEVar> Weights, int WeightBits,
+										 Memory<DFEVar> Weights, int WeightBits, DFEVar WeightArrayOffset,
 										 DFEVar Enable, DFEVar FirstOutput)
 				{
 					/* Params
@@ -308,7 +315,7 @@ class MovingAverageSimpleKernel extends Kernel
 					DFEVar InPaddingZone = (Params[4] > 0) &
 										   ( XTicks < Params[4] | XTicks > InDims[1] + Params[4] - 1 | YTicks < Params[4] | YTicks > InDims[1] + Params[4] - 1);
 
-					DFEVar MemInput = io.input("Input" + Layer, IODataType, Enable > 0 & ((InPaddingZone.eq(0) | NotInputPadding.eq(0)) & (OutPointTicks < FirstOutput + 2 + (BurstSizeDataType*BurstMult) | TickCount < Padding + 2*PaddedInDims*PaddedInDims*InDims[0])));
+					DFEVar MemInput = io.input("Input" + Layer, IODataType, Enable > 0 & (InPaddingZone.eq(0) | NotInputPadding.eq(0)) & (TickCount < 2*(Padding + PaddedInDims*PaddedInDims*InDims[0])));
 
 					DFEVar Input = InPaddingZone ? 0 : MemInput;
 
@@ -338,7 +345,8 @@ class MovingAverageSimpleKernel extends Kernel
 								// Get Weight
 
 									// Calculate Weight Offset
-									DFEVar WeightOffset =  (KTicks) * InDims[0] * Params[2] * Params[2] +				// Kernel
+									DFEVar WeightOffset =  WeightArrayOffset + 											// Offset in Weight Array
+														   (KTicks) * InDims[0] * Params[2] * Params[2] +				// Kernel
 														   (CTicks + Channel) * Params[2] * Params[2] +					// Channel
 													 	   y*Params[2] +												// Line
 													 	   x;															// Col
@@ -478,7 +486,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// ---------- 		Input Control		-------- //
 					// --------------------------------------------- //
 
-					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & (OutPointTicks < FirstOutput + 2 + (BurstSizeDataType*BurstMult) | TickCount < InDims[0]*InDims[1]*InDims[1] + Padding));
+					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & (TickCount < InDims[0]*InDims[1]*InDims[1] + Padding));
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -614,7 +622,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// ---------- 		Input Control		-------- //
 					// --------------------------------------------- //
 
-					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & (OutPointTicks < FirstOutput + 2 + (BurstSizeDataType*BurstMult) | TickCount < InDims[0]*InDims[1]*InDims[1] + Padding));
+					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & (TickCount < InDims[0]*InDims[1]*InDims[1] + Padding));
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -687,7 +695,7 @@ class MovingAverageSimpleKernel extends Kernel
 										 int Parallelism, double[] Params, int InputPadding,
 										 int[] InDims, int[] OutDims,
 										 int BurstMult,
-										 Memory<DFEVar> Weights, int WeightBits,
+										 Memory<DFEVar> Weights, int WeightBits, DFEVar WeightArrayOffset,
 										 DFEVar Enable, DFEVar FirstOutput)
 				{
 					/*
@@ -718,8 +726,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// --------------------------------------------- //
 
 					// Check if Valid Output Point
-					DFEVar DataOutEnable = ( (Enable > 0) &
-										   ( (InputTicks.eq(BurstSizeDataType * BurstMult/Parallelism - 1))));
+					DFEVar DataOutEnable = Enable > 0 & InputTicks.eq((BurstSizeDataType * BurstMult/Parallelism) - 1);
 
 					// Output Points
 					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(BurstMult * BurstSizeDataType))
@@ -735,7 +742,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// ---------- 		Input Control		---------//
 					// --------------------------------------------- //
 
-					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutputTicks.eq(0) & (OutPointTicks < BurstMult*BurstSizeDataType | TickCount < BurstMult*BurstSizeDataType + InputPadding));
+					DFEVar Input = io.input("Input" + Layer, IODataType, Enable > 0 & OutputTicks.eq(0) & (TickCount < Math.pow(BurstMult*BurstSizeDataType, 2) + InputPadding));
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -756,7 +763,8 @@ class MovingAverageSimpleKernel extends Kernel
 							// Get Weight
 
 								// Calculate Weight Offset
-								DFEVar WeightOffset = (InputTicks + CurIn) * BurstSizeDataType * BurstMult +		// Input Offset
+								DFEVar WeightOffset = WeightArrayOffset + 											// Offset in WeightArray
+													  (InputTicks + CurIn) * BurstSizeDataType * BurstMult +		// Input Offset
 													  OutputTicks;													// Output Offset
 
 							// Read Weight from FMem
@@ -782,8 +790,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// --------------------------------------------- //
 
 					int FirstOutputMax = InDims[0] > 1 ? InDims[0] * InDims[1] * InDims[1] : InDims[1];
-					FirstOutputMax /= (BurstMult * BurstSizeDataType);
-					FirstOutputMax = InputPadding > 0 ? FirstOutputMax : FirstOutputMax - 1;
+					FirstOutputMax = (int) Math.floor((FirstOutputMax + InputPadding) / (float)(BurstMult*BurstSizeDataType));
 
 					DFEVar ActEnable = DataOutEnable & FirstOutput.eq(FirstOutputMax);
 

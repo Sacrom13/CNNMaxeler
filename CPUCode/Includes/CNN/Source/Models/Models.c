@@ -279,11 +279,15 @@
 					printf("Cannot set BurstSize.\n");
 					printf("BurstMult has to be >= 1");
 				}
+
+				int WeightDims = 0;
+				char FconFlag = 0;
 				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
 				{
 					switch(Net->Blocks[Block].Layers[Layer])
 					{
 						case Conv:
+									// Check if Output Size does not exceed 2 channels at once
 									if(BM * BurstSizeDataType >= 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
 									{
 										printf("Cannot set BurstSize.\n");
@@ -292,22 +296,57 @@
 										exit(CNNConstructionError);
 									}
 
-									break;
-						case Fcon:
-									if(BM > 8)
+									// Check if Weights fit in FMem
+									WeightDims = 2 * Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].LayerParams[Layer][2] * Net->Blocks[Block].LayerParams[Layer][2];
+									if(WeightDims > pow(2, 16))
 									{
-										printf("Cannot set BurstSize.\n");
-										printf("Layer %d(Fcon) in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-										printf("Blocks with Fcon Layers must have BurstMult < 7\n");
+										printf("Layer %d(Conv) in Block %d has invalid Kernel Dimensions\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+										printf("2 * InChannels(%d) * KernelSize*KernelSize (%dx%d) = %d. This cannot be greater than 65536\n", Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].LayerParams[Layer][2], Net->Blocks[Block].LayerParams[Layer][2]);
 										exit(CNNConstructionError);
 									}
+									break;
+						case Fcon:
+									// If Bm > 8 Weights don't fit in FMem.
+										if(BM > 8)
+										{
+											printf("Cannot set BurstSize.\n");
+											printf("Layer %d(Fcon) in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+											printf("Blocks with Fcon Layers must have BurstMult < 7\n");
+											exit(CNNConstructionError);
+										}
+
+									// Check if Weights fit in FMem
+										if(FconFlag == 0)
+										{
+											WeightDims += pow(BM * BurstSizeDataType, 2);
+											if(WeightDims > pow(2, 16))
+											{
+												printf("Layer %d(Fcon) in Block %d has exceeded Weight Dimensions\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+												printf("TotalWeightDims = %d, which cannot be greater than 65536.\n", WeightDims);
+												printf("Try lowering BurstSize using SetBurstMult()");
+												exit(CNNConstructionError);
+											}
+											FconFlag = 1;
+										}
+										else
+										{
+											WeightDims = 2 * pow(BM * BurstSizeDataType, 2);
+											if(WeightDims > pow(2, 16))
+											{
+												printf("Layer %d(Fcon) in Block %d has exceeded Weight Dimensions\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+												printf("TotalWeightDims = %d, which cannot be greater than 65536.\n", WeightDims);
+												printf("Try lowering BurstSize using SetBurstMult()");
+												exit(CNNConstructionError);
+											}
+										}
 
 									// Check if Parallelism is allowed
-									if(Net->Blocks[Block].FParams.Parallelism[Layer] > OutputSize/2)
-									{
-										printf("Fcon Layer %d in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-										printf("Parallelism (%d), cannot be greater than BurstMult*24/2(%d)\n", Net->Blocks[Block].FParams.Parallelism[Layer], OutputSize/2);
-									}
+										if(Net->Blocks[Block].FParams.Parallelism[Layer] > OutputSize/2)
+										{
+											printf("Fcon Layer %d in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+											printf("Parallelism (%d), cannot be greater than BurstMult*24/2(%d)\n", Net->Blocks[Block].FParams.Parallelism[Layer], OutputSize/2);
+											exit(CNNConstructionError);
+										}
 
 									break;
 					}
@@ -401,15 +440,15 @@
 										}
 										else
 										{
-											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-											/*if(Net->Blocks[Block].Layers[Layer - 1] == Fcon)
+											//LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
+											if(Net->Blocks[Block].Layers[Layer - 1] == Fcon)
 											{
 												LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
 											}
 											else
 											{
-												LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] - 1;
-											}*/
+												LayerCalls[Layer][0] = LayerCalls[Layer - 1][0] + 1;
+											}
 										}
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + (int)(ceil(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2] / (float) OutputSize) * ceil(Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
 										break;
@@ -462,7 +501,7 @@
 						}
 
 						// DFEWeights
-						Net->Blocks[Block].FParams.DFEWeights[CurrentCall] = calloc(2*512*11*11,sizeof(double));
+						Net->Blocks[Block].FParams.DFEWeights[CurrentCall] = calloc(pow(2, 16), sizeof(double));
 						if(Net->Blocks[Block].FParams.DFEWeights[CurrentCall] == NULL)
 						{
 							printf("Memory Allocation Error.\n");
@@ -781,10 +820,34 @@
 						exit(CNNConstructionError);
 					}
 
-					if(Padding >= KernelSize)
+					if(NKernels < 1)
 					{
 						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
-						printf("Padding has to be less than Kernel Size.\n");
+						printf("NKernels has to be greater than or equal to 1\n");
+						exit(CNNConstructionError);
+					}
+					if(KernelSize < 2)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("KernelSize has to be greater than or equal to 2\n");
+						exit(CNNConstructionError);
+					}
+					if(Stride < 1)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Stride has to be greater than or equal to 1\n");
+						exit(CNNConstructionError);
+					}
+					if(Padding < 0)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Padding has to be greater than or equal to 0\n");
+						exit(CNNConstructionError);
+					}
+					if(Parallelism < 1)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Parallelism has to be greater than or equal to 1\n");
 						exit(CNNConstructionError);
 					}
 
@@ -931,21 +994,40 @@
 						exit(PrecedenceError);
 					}
 
-					// --- Check if Pool Layer can be added --- //
+				// --- Check if Pool Layer can be added --- //
 
-						for(int Block = 0; Block < CurrentNet->TotalBlocks + 1; ++Block)
+					for(int Block = 0; Block < CurrentNet->TotalBlocks + 1; ++Block)
+					{
+						for(int Layer = 0; Layer < CurrentNet->Blocks[Block].BlockSize; ++Layer)
 						{
-							for(int Layer = 0; Layer < CurrentNet->Blocks[Block].BlockSize; ++Layer)
+							if(CurrentNet->Blocks[Block].Layers[Layer] == Fcon)
 							{
-								if(CurrentNet->Blocks[Block].Layers[Layer] == Fcon)
-								{
-									printf("Pool layer cannot be added after Fcon layer.\n");
-									exit(CNNConstructionError);
-								}
+								printf("Pool layer cannot be added after Fcon layer.\n");
+								exit(CNNConstructionError);
 							}
 						}
+					}
 
 				// --- Check if Parameters are Valid --- //
+
+					if(FilterSize < 2)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("FilterSize has to be greater than or equal to 2\n");
+						exit(CNNConstructionError);
+					}
+					if(Type < MaxPool || Type > MeanPool)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Pooling Type Invalid.\n");
+						exit(CNNConstructionError);
+					}
+					if(Stride < 1)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Stride has to be greater than or equal to 1\n");
+						exit(CNNConstructionError);
+					}
 
 					if(((CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1] - FilterSize) % Stride) != 0)
 					{
@@ -954,7 +1036,6 @@
 						printf("InDims - PoolSize = %d is not divisible by Stride.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize - 1][1] - FilterSize);
 						exit(CNNConstructionError);
 					}
-
 
 				// --- Set Layer and Parallelism --- //
 
@@ -1082,6 +1163,21 @@
 							printf("No Layers can be added after Fcon layer with Softmax activation\n");
 							exit(CNNConstructionError);
 						}
+					}
+
+				// --- Check if Params are valid --- //
+
+					if(OutputSize < 1)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("OutputSize has to be greater than or equal to 1\n");
+						exit(CNNConstructionError);
+					}
+					if(Parallelism < 1)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Parallelism has to be greater than or equal to 1\n");
+						exit(CNNConstructionError);
 					}
 
 				// --- Set Layer and Parallelism --- //

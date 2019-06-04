@@ -1097,7 +1097,7 @@
 
 			Print1DMatrix(TestOutput1D, OutDims1D);
 
-			double Margin = .5e-2;
+			double Margin = 1e-3;
 			Compare1D(Output, TestOutput1D, OutDims1D, Margin);
 
 		return NULL;
