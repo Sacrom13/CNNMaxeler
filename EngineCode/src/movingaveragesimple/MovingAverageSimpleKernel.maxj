@@ -790,7 +790,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// --------------------------------------------- //
 
 					int FirstOutputMax = InDims[0] > 1 ? InDims[0] * InDims[1] * InDims[1] : InDims[1];
-					FirstOutputMax = (int) Math.floor((FirstOutputMax + InputPadding) / (float)(BurstMult*BurstSizeDataType));
+					FirstOutputMax = (int) (Math.floor((FirstOutputMax + InputPadding) / (float)(BurstMult*BurstSizeDataType)) - 1);
 
 					DFEVar ActEnable = DataOutEnable & FirstOutput.eq(FirstOutputMax);
 
