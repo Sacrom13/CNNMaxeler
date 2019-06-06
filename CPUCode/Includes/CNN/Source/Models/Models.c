@@ -301,7 +301,7 @@
 									if(WeightDims > pow(2, 16))
 									{
 										printf("Layer %d(Conv) in Block %d has invalid Kernel Dimensions\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-										printf("2 * InChannels(%d) * KernelSize*KernelSize (%dx%d) = %d. This cannot be greater than 65536\n", Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].LayerParams[Layer][2], Net->Blocks[Block].LayerParams[Layer][2]);
+										printf("2 * InChannels(%d) * KernelSize*KernelSize (%dx%d) = %d. This cannot be greater than 65536\n", Net->Blocks[Block].Dims[Layer][0], (int)Net->Blocks[Block].LayerParams[Layer][2], (int)Net->Blocks[Block].LayerParams[Layer][2], (int)(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].LayerParams[Layer][2] * Net->Blocks[Block].LayerParams[Layer][2]));
 										exit(CNNConstructionError);
 									}
 									break;
@@ -427,8 +427,8 @@
 										}
 										else
 										{
-											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 1 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-											LayerCalls[Layer][1] = LayerCalls[Layer - 1][1] + 1;
+											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 2 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
+											LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
 										}
 
 										break;
@@ -936,7 +936,7 @@
 							exit(MemoryError);
 						}
 
-						RandomizeArray3D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][i], WeightDims, -0.05, 0.05);
+						RandomizeArray3D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][i], WeightDims, 0, 0.05);
 					}
 				
 				// --- Count number of Layers in this block --- //

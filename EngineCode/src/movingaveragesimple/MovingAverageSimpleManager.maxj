@@ -308,9 +308,7 @@ class MovingAverageSimpleManager extends CustomManager
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
-
 											break;
-
 								case Fcon:
 											if(Dims[Layer][0] == 1)
 											{

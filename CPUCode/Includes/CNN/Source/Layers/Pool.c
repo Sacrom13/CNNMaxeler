@@ -123,7 +123,6 @@
                          double*** Output,                       // Output
                          double* Params)                         // Params
         {
-            
 
             // Processing cicle
             for(int channel = 0; channel < InDims[0]; ++channel)

@@ -1081,10 +1081,10 @@
 
 		// Run CPU
 
-			printf("Running CPU\n");
 			char* aux = malloc(sizeof(char));
 			*aux = 0;
 
+			printf("Running CPU!\n");
 			StartTiming();
 			double*** TestOutput = BlockForwardCpu(Net.Blocks[0], Input, aux);
 			printf("CPU Finished. Time Taken = %.2f milliseconds\n", StopTiming()/1000);
@@ -1097,7 +1097,7 @@
 
 			Print1DMatrix(TestOutput1D, OutDims1D);
 
-			double Margin = 1e-3;
+			double Margin = .5e-2;
 			Compare1D(Output, TestOutput1D, OutDims1D, Margin);
 
 		return NULL;
