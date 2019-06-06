@@ -122,8 +122,11 @@ class MovingAverageSimpleManager extends CustomManager
 
 		// 1.5 --- Max Sizes --- //
 
-			private static final int MaxBlockSize = 20;	// Max Amount of Layers in a Block
-			private static final int MaxParams = 5;		// Max Params a Layer can Have
+			private static final int MaxBlockSize = 20;		// Max Amount of Layers in a Block
+			private static final int MaxParams = 5;			// Max Params a Layer can Have
+
+			private static final int MaxFwdInStreams = 4;	// Max FwdProp Input Streams
+			private static final int MaxFwdOutStreams = 3;	// Max FwdProp Output Streams
 
 		// 1.6 --- Mem Control --- //
 
@@ -156,25 +159,73 @@ class MovingAverageSimpleManager extends CustomManager
 											WeightDims,
 											BurstMult));
 
-
 			// Linking Kernel Inputs and Outputs to LMem
-			for(int Layer = 0; Layer < Layers.length; ++Layer)
-			{
-				// Inputs
-				DFELink Input = LMem.addStreamFromLMem("Input" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-				K.getInput("Input" + Layer) <== Input;
 
-				// Outputs
-				DFELink Output = LMem.addStreamToLMem("Output" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-				Output <== K.getOutput("Output" + Layer);
+				// Stream Control
+				int CurInStream = 0, CurOutStream = 0;
+				boolean InputFlag = false, OutputFlag = false;
 
-				// Connect Extra Outputs in case Fcon Layer
-				if(Layers[Layer] == Fcon)
+				// Input
+				DFELink[] FwdInStreams = new DFELink[MaxFwdInStreams];
+
+				// Output
+				DFELink[] FwdOutStreams = new DFELink[MaxFwdOutStreams];
+
+
+				// Linking Cycle
+				for(int Layer = 0; Layer < Layers.length; ++Layer)
 				{
-					Input = LMem.addStreamFromLMem("PrevOutput" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-					K.getInput("PrevOutput" + Layer) <== Input;
+					// Connect Input
+
+						if(InputFlag == false)
+						{
+							FwdInStreams[CurInStream] = LMem.addStreamFromLMem("FwdInStream" + CurInStream, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+						}
+
+						K.getInput("Input" + Layer) <== (FwdInStreams[CurInStream]);
+
+						++CurInStream;
+						if(CurInStream == MaxFwdInStreams)
+						{
+							CurInStream = 0;
+							InputFlag = true;
+						}
+
+					// Connect Output
+
+						if(OutputFlag == false)
+						{
+							FwdOutStreams[CurOutStream] = LMem.addStreamToLMem("FwdOutStream" + CurOutStream, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+						}
+
+						(FwdOutStreams[CurOutStream]) <== K.getOutput("Output" + Layer);
+
+						++CurOutStream;
+						if(CurOutStream == MaxFwdOutStreams)
+						{
+							CurOutStream = 0;
+							OutputFlag = true;
+						}
+
+					// Connect Extra Input (Fcon Layer)
+
+						if(Layers[Layer] == Fcon)
+						{
+							if(InputFlag == false)
+							{
+								FwdInStreams[CurInStream] = LMem.addStreamFromLMem("FwdInStream" + CurInStream, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+							}
+
+							K.getInput("PrevOutput" + Layer) <== FwdInStreams[CurInStream];
+
+							++CurInStream;
+							if(CurInStream == MaxFwdInStreams)
+							{
+								CurInStream = 0;
+								InputFlag = true;
+							}
+						}
 				}
-			}
 		}
 
 	// 3 --- Engine Interfaces ---  //
@@ -266,6 +317,7 @@ class MovingAverageSimpleManager extends CustomManager
 				// --------------------------------------------- //
 
 					int MemStart = 0, TotalMemSize;
+					int CurInStream = 0, CurOutStream = 0;
 					for(int Layer = 0; Layer < Layers.length; ++Layer)
 					{
 						// Setup First Output Points
@@ -287,13 +339,19 @@ class MovingAverageSimpleManager extends CustomManager
 											TotalMemSize *= DataType.sizeInBytes();
 
 											// Input
-											Ei.setLMemLinearWrapped("Input" + Layer,
+											Ei.setLMemLinearWrapped("FwdInStream" + CurInStream,
 																	InputOffset + Ei.addConstant(MemStart),
 																	Ei.addConstant(TotalMemSize),
 																	(MemControl[Layer] > 0 ? 1 : 0) * ((2 * TotalMemSize) + OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
+
+											++CurInStream;
+											if(CurInStream == MaxFwdInStreams)
+											{
+												CurInStream = 0;
+											}
 											break;
 
 								case Pool:
@@ -301,13 +359,19 @@ class MovingAverageSimpleManager extends CustomManager
 											TotalMemSize *= DataType.sizeInBytes();
 
 											// Input
-											Ei.setLMemLinearWrapped("Input" + Layer,
+											Ei.setLMemLinearWrapped("FwdInStream" + CurInStream,
 																	InputOffset + Ei.addConstant(MemStart),
 																	Ei.addConstant(TotalMemSize),
 																	(MemControl[Layer] > 0 ? 1 : 0) * (TotalMemSize + OutputSizeBytes),
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
+
+											++CurInStream;
+											if(CurInStream == MaxFwdInStreams)
+											{
+												CurInStream = 0;
+											}
 											break;
 								case Fcon:
 											if(Dims[Layer][0] == 1)
@@ -319,7 +383,7 @@ class MovingAverageSimpleManager extends CustomManager
 											TotalMemSize *= DataType.sizeInBytes();
 
 											// Input
-											Ei.setLMemLinearWrapped("Input" + Layer,
+											Ei.setLMemLinearWrapped("FwdInStream" + CurInStream,
 																	InputOffset + MemStart + (FirstOutputs[Layer] * BurstSizeBytes * BurstMult),
 																	Ei.addConstant(BurstMult * BurstSizeBytes),
 																	(MemControl[Layer] > 0 ? 1 : 0) * (BurstMult*BurstSizeBytes + OutputSizeBytes),
@@ -327,17 +391,35 @@ class MovingAverageSimpleManager extends CustomManager
 
 											MemStart += TotalMemSize;
 
+											++CurInStream;
+											if(CurInStream == MaxFwdInStreams)
+											{
+												CurInStream = 0;
+											}
+
 											// Prev Output
-											Ei.setLMemLinear("PrevOutput" + Layer,
+											Ei.setLMemLinear("FwdInStream" + CurInStream,
 															InputOffset + MemStart + ( (MemControl[Layer] - 1) * OutputSizeBytes),
 															(MemControl[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
+
+											++CurInStream;
+											if(CurInStream == MaxFwdInStreams)
+											{
+												CurInStream = 0;
+											}
 											break;
 							}
 
 						// Output
-						Ei.setLMemLinear("Output" + Layer,
+						Ei.setLMemLinear("FwdOutStream" + CurOutStream,
 										InputOffset + MemStart + ( (MemControl[Layer] - 1) * OutputSizeBytes),
 										(MemControl[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
+
+						++CurOutStream;
+						if(CurOutStream == MaxFwdOutStreams)
+						{
+							CurOutStream = 0;
+						}
 					}
 
 					// Ignore Every Param not used here
@@ -420,7 +502,6 @@ class MovingAverageSimpleManager extends CustomManager
 				    				break;
 
 				    		case Conv:
-
 				    				// Get Layer Params
 				    				for(i = 0; i < 5; ++i)
 				    				{
