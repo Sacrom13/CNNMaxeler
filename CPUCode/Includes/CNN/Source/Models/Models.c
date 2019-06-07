@@ -274,10 +274,10 @@
 				int OutputSize = BM * BurstSizeDataType;
 
 				// Check if BurstMult is valid
-				if(BM < 1)
+				if(BM < 2)
 				{
 					printf("Cannot set BurstSize.\n");
-					printf("BurstMult has to be >= 1");
+					printf("BurstMult has greater than 1.");
 				}
 
 				int WeightDims = 0;

@@ -283,7 +283,7 @@ class MovingAverageSimpleKernel extends Kernel
 					.withEnable(Enable > 0 & Params[3] > 1 & XTicks.eq(PaddedInDims - 1) & NotInputPadding & YTicks < PaddedInDims - Params[2]);
 					Counter YStrideCounter = control.count.makeCounter(YStrideParams);
 					DFEVar YStrideTicks = YStrideCounter.getCount().cast(dfeUInt(16));
-
+//
 					// Check if Output Point or not
 					DFEVar IsOutputPoint = Enable > 0 &
 										   (XStrideTicks.eq(0) & YStrideTicks.eq(0) &	// Stride Control
