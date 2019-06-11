@@ -283,7 +283,7 @@ class MovingAverageSimpleKernel extends Kernel
 					.withEnable(Enable > 0 & Params[3] > 1 & XTicks.eq(PaddedInDims - 1) & NotInputPadding & YTicks < PaddedInDims - Params[2]);
 					Counter YStrideCounter = control.count.makeCounter(YStrideParams);
 					DFEVar YStrideTicks = YStrideCounter.getCount().cast(dfeUInt(16));
-//
+
 					// Check if Output Point or not
 					DFEVar IsOutputPoint = Enable > 0 &
 										   (XStrideTicks.eq(0) & YStrideTicks.eq(0) &	// Stride Control
@@ -296,7 +296,7 @@ class MovingAverageSimpleKernel extends Kernel
 					IsOutputPoint |= PadEnable;
 
 					// Output Points														2x Output size because of transitions
-					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(3 * OutDims[1] * OutDims[1] + (BurstSizeDataType * BurstMult)))
+					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(2 * OutDims[1] * OutDims[1] + (BurstSizeDataType * BurstMult)))
 					.withMax(3 * OutDims[1] * OutDims[1] + (BurstSizeDataType * BurstMult) - 1)
 					.withWrapMode(WrapMode.STOP_AT_MAX)
 					.withInitValue(1)
@@ -398,8 +398,194 @@ class MovingAverageSimpleKernel extends Kernel
 
 			// 3.1.2 --- Backward --- //
 
-				private void ConvBackward()
+				private void ConvBackward(DFEVar TickCount, int Layer,
+											 int Parallelism, double[] Params, int Padding,
+											 int[] InDims, int[] OutDims,
+											 int BurstMult,
+											 Memory<DFEVar> Weights, int WeightBits, DFEVar WeightArrayOffset,
+											 DFEVar Enable, DFEVar FirstOutput)
 				{
+					/*
+						[0] = Act Func;
+						[1] = NKernels;
+						[2] = KernelSize;
+						[3] = Stride;
+						[4] = Padding;
+					 */
+
+
+					// Helper Variables to avoid doing same computation more than once
+
+					//									Padding for fractionally Strided         Padding for Full Conv
+					int PaddedOutDims = (int) (OutDims[1] + ((OutDims[1] - 1) * (Params[3] - 1)) + 2 * (Params[2 - 1]));
+					int DFEStride = Params[3] > 1 ? (int) Params[3] : 2;
+
+					// --------------------------------------------- //
+					// ----------  Input Position Counters	---------//
+					// --------------------------------------------- //
+
+					// Input Padding ( LMem )		( Using Tick Count works since at most we only go through the Padding Zone Once!)
+					DFEVar NotInputPadding = TickCount < InDims[0] * Math.pow(PaddedOutDims, 2) | TickCount >= (OutDims[0] * Math.pow(PaddedOutDims, 2)) + Padding;
+
+					// X
+					Count.Params XParams = control.count.makeParams(MathUtils.bitsToAddress(PaddedOutDims))
+					.withMax(PaddedOutDims)
+					.withEnable(Enable > 0 & NotInputPadding);
+					Counter XCounter = control.count.makeCounter(XParams);
+					DFEVar XTicks = XCounter.getCount().cast(dfeUInt(16));
+
+					// Y
+					Count.Params YParams = control.count.makeParams(MathUtils.bitsToAddress(PaddedOutDims))
+					.withMax(PaddedOutDims)
+					.withEnable(Enable > 0 & XTicks.eq(PaddedOutDims - 1) & NotInputPadding);
+					Counter YCounter = control.count.makeCounter(YParams);
+					DFEVar YTicks = YCounter.getCount().cast(dfeUInt(16));
+
+					// Channels
+					Count.Params CParams = control.count.makeParams(MathUtils.bitsToAddress(OutDims[0]))
+					.withMax(OutDims[0])
+					.withEnable(Enable > 0 & XTicks.eq(PaddedOutDims - 1) & YTicks.eq(PaddedOutDims - 1) & NotInputPadding);
+					Counter CCounter = control.count.makeCounter(CParams);
+					DFEVar CTicks = CCounter.getCount().cast(dfeUInt(16));
+
+					// Kernel
+					Count.Params KParams = control.count.makeParams(MathUtils.bitsToAddress(2))
+					.withMax(2)
+					.withEnable(Enable > 0 & CTicks.eq(OutDims[0] - 1) & XTicks.eq(PaddedOutDims - 1) & YTicks.eq(PaddedOutDims - 1) & NotInputPadding);
+					Counter KCounter = control.count.makeCounter(KParams);
+					DFEVar KTicks = KCounter.getCount().cast(dfeUInt(16));
+
+					// --------------------------------------------- //
+					// ---------- 		Output Control		---------//
+					// --------------------------------------------- //
+
+					// Check if Output Point or not
+					DFEVar IsOutputPoint = Enable > 0 &
+										    (CTicks.eq((InDims[0]/Parallelism) - 1) &	// If we are in last Computation Channel for a given Kernel
+										    YTicks < PaddedOutDims - Params[2] + 1 &	// If we are in correct Y position to Output
+											XTicks < PaddedOutDims - Params[2] + 1 );	// If we are in correct X position to Output
+
+					// Padding
+					DFEVar PadEnable = (Enable.eq(Math.ceil(InDims[0] * InDims[1] * InDims[1]/ (float)(BurstMult*BurstSizeDataType))) & (TickCount > Padding + 2 * OutDims[0] * PaddedOutDims * PaddedOutDims));
+					IsOutputPoint |= PadEnable;
+
+					// Output Points																2x Output size because of transitions
+					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(2 * InDims[1] * InDims[1] + (BurstSizeDataType * BurstMult)))
+					.withMax(3 * InDims[1] * InDims[1] + (BurstSizeDataType * BurstMult) - 1)
+					.withWrapMode(WrapMode.STOP_AT_MAX)
+					.withInitValue(1)
+					.withEnable((Enable > 0) & (IsOutputPoint));
+					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
+					DFEVar OutPointTicks = OutPointCounter.getCount().cast(dfeUInt(32));
+
+					DFEVar DataOutEnable =  (Enable > 0) &																											// If Layer is Active
+											( (IsOutputPoint) & (OutPointTicks > FirstOutput) & (OutPointTicks < FirstOutput + 2 + (BurstSizeDataType*BurstMult)));	// Regular Output Point
+
+
+					// --------------------------------------------- //
+					// ---------- 		Input Control		---------//
+					// --------------------------------------------- //
+
+					// X
+					Count.Params XStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & Params[3] > 1 & NotInputPadding & (XTicks > Params[2] - 2) & (XTicks < PaddedOutDims - (Params[2] - 1)));
+					Counter XStrideCounter = control.count.makeCounter(XStrideParams);
+					DFEVar XStrideTicks = XStrideCounter.getCount().cast(dfeUInt(16));
+
+					// Y
+					Count.Params YStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & Params[3] > 1 & XTicks.eq(PaddedOutDims - 1) & NotInputPadding & (YTicks > Params[2] - 2) & (YTicks < PaddedOutDims - (Params[2] - 1)));
+					Counter YStrideCounter = control.count.makeCounter(YStrideParams);
+					DFEVar YStrideTicks = YStrideCounter.getCount().cast(dfeUInt(16));
+
+					// Padding Zone
+					DFEVar InPaddingZone = ( XTicks < Params[2] - 2 | XTicks > PaddedOutDims - Params[2] | YTicks < Params[4] - 2 | YTicks > PaddedOutDims - Params[2]) |	// Full Conv Padding
+										   ( XStrideTicks.neq(0) | YStrideTicks.neq(0));
+
+					// Wether we should input from the Memory streams or not
+					DFEVar DataInEnable = Enable > 0 & (InPaddingZone.eq(0) | NotInputPadding.eq(0)) & (TickCount < 2*(Padding + PaddedOutDims*PaddedOutDims*InDims[0]));
+
+					// Streams required for Input Calculation
+					DFEVar Delta = io.input("Delta" + Layer, IODataType, DataInEnable);
+					DFEVar FwdOutput = io.input("FwdOutput" + Layer, IODataType, DataInEnable);
+
+					// Activation Function
+					DFEVar MemInput = Delta;
+					switch((int) Params[0])
+					{
+						case ReLu:
+									MemInput = FwdOutput > 0 ? MemInput : 0;
+									break;
+
+						case Sigmoid:
+									MemInput *= FwdOutput * (1 - FwdOutput);
+									break;
+						case Tanh:
+									MemInput *= (1 - FwdOutput*FwdOutput);
+									break;
+					}
+
+					// Make input 0 if Padding.
+					DFEVar Input = InPaddingZone ? 0 : MemInput;
+
+					// --------------------------------------------- //
+					// ---------- 		Calc Output		   ----------//
+					// --------------------------------------------- //
+
+					DFEVar Output = constant.var(0);
+
+					// Select Window
+					for(int Channel = 0; Channel < OutDims[0]; Channel += OutDims[0] / Parallelism)
+					{
+						for(int y = 0; y < Params[2]; ++y)
+						{
+							for(int x = 0; x < Params[2]; ++x)
+							{
+								// Get Data Point
+
+									// Calculate Offset of input data
+									int DataOffset = (int) (Channel*Math.pow(PaddedOutDims, 2) +  				// Channel
+													 y * (PaddedOutDims) +										// Line
+												 	 x);														// Col
+
+									// Read input data from LMem
+									DFEVar Data = stream.offset(Input, DataOffset).cast(ComputationDataType);
+
+								// Get Weight
+
+									// Calculate Weight Offset
+									DFEVar WeightOffset =  WeightArrayOffset + 											// Offset in Weight Array
+														   (KTicks) * OutDims[0] * Params[2] * Params[2] +				// Kernel
+														   (CTicks + Channel) * Params[2] * Params[2] +					// Channel
+													 	   y*Params[2] +												// Line
+													 	   x;															// Col
+
+									// Read Weight from FMem
+									DFEVar Weight = Weights.read(WeightOffset.cast(dfeUInt(WeightBits))).cast(ComputationDataType);
+
+								// Multiply and add to Output
+									Output += Data * Weight;
+							}
+						}
+					}
+
+					// Get the previous result already in memory
+					DFEVar PrevOutput = io.input("PrevOutput" + Layer, IODataType, DataOutEnable);
+					Output += DataOutEnable ? PrevOutput.cast(ComputationDataType) : 0;
+
+					// --------------------------------------------- //
+					// ---------- 			Output		   ----------//
+					// --------------------------------------------- //
+
+					// Output 0 if Padding
+					Output = PadEnable ? 0 : Output;
+
+					// Write Result to Mem
+					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
+
+
 				}
 
 		// 3.2 --- Pool --- //

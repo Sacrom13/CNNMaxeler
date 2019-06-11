@@ -274,10 +274,10 @@
 				int OutputSize = BM * BurstSizeDataType;
 
 				// Check if BurstMult is valid
-				if(BM < 2)
+				if(BM < 1)
 				{
 					printf("Cannot set BurstSize.\n");
-					printf("BurstMult has greater than 1.");
+					printf("BurstMult has greater than or equal to 1.");
 				}
 
 				int WeightDims = 0;
@@ -936,7 +936,7 @@
 							exit(MemoryError);
 						}
 
-						RandomizeArray3D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][i], WeightDims, 0, 0.05);
+						RandomizeArray3D(CurrentNet->Blocks[CurrentNet->TotalBlocks].Weights[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][i], WeightDims, -0.05, 0.05);
 					}
 				
 				// --- Count number of Layers in this block --- //

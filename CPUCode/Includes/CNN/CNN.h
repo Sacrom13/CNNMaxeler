@@ -32,7 +32,6 @@
 		- Others
 			https://deepnotes.io/softmax-crossentropy
 			
-
 		- Current
 
 			// CrossEnt

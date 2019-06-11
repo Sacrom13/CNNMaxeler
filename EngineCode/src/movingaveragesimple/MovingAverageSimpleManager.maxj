@@ -16,6 +16,9 @@ import java.io.IOException;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelConfiguration;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.Effort;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.OptimizationGoal;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
@@ -122,8 +125,11 @@ class MovingAverageSimpleManager extends CustomManager
 
 		// 1.5 --- Max Sizes --- //
 
-			private static final int MaxBlockSize = 20;	// Max Amount of Layers in a Block
-			private static final int MaxParams = 5;		// Max Params a Layer can Have
+			private static final int MaxBlockSize = 20;		// Max Amount of Layers in a Block
+			private static final int MaxParams = 5;			// Max Params a Layer can Have
+
+			private static final int MaxFwdInStreams = 4;	// Max FwdProp Input Streams
+			private static final int MaxFwdOutStreams = 3;	// Max FwdProp Output Streams
 
 		// 1.6 --- Mem Control --- //
 
@@ -138,43 +144,77 @@ class MovingAverageSimpleManager extends CustomManager
 		{
 			super(engineParams);
 
-			// Lmem Interface
-			LMemInterface LMem = addLMemInterface();
+			// Manager Configs
 
-			// Streams from CPU to LMem and from LMem to CPU, to Write to LMem or Read from LMem
-			DFELink cpu2lmem = LMem.addStreamToLMem("DataInWrite", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-			DFELink lmem2cpu = LMem.addStreamFromLMem("DataOutRead", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-			DFELink fromcpu = addStreamFromCPU("DataIn");
-			DFELink tocpu = addStreamToCPU("DataOut");
-			cpu2lmem <== fromcpu;
-			tocpu <== lmem2cpu;
-//
-			// Setup Kernel and pass All Params
+				// Set Pipelining
+				KernelConfiguration KConf = getCurrentKernelConfig();
+				KConf.optimization.setCEPipelining(Pipelining);
+
+				// set LMem Frequency
+				/*LMemConfig LMemConf = makeLMemConfig();
+				LMemConf.setArbitrationMode(ArbitrationMode.DYNAMIC);
+				LMemInterface LMem = addLMemInterface(LMemConf);*/
+				LMemInterface LMem = addLMemInterface();
+
+				// Build Configuration
+				BuildConfig BConf = getBuildConfig();
+
+					// Building Speed
+					BConf.setBuildEffort(Effort.MEDIUM);
+					BConf.setMPPRCostTableSearchRange(1, 4);
+					BConf.setMPPRParallelism(64);
+
+					// Build Objectives
+					BConf.setOptimizationGoal(OptimizationGoal.SPEED);
+
+
+			// Data Streams for Write and Read
+
+				// Streams from CPU to LMem and from LMem to CPU, to Write to LMem or Read from LMem
+				DFELink cpu2lmem = LMem.addStreamToLMem("DataInWrite", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+				DFELink lmem2cpu = LMem.addStreamFromLMem("DataOutRead", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+				DFELink fromcpu = addStreamFromCPU("DataIn");
+				DFELink tocpu = addStreamToCPU("DataOut");
+				cpu2lmem <== fromcpu;
+				tocpu <== lmem2cpu;
+
+				// Setup Kernel
 				KernelBlock K = addKernel(new MovingAverageSimpleKernel(makeKernelParameters("Kernel"),
 											Layers,
 											Dims, Params, Parallelism, Padding,
 											WeightDims,
 											BurstMult));
 
+				// set stream clock frequency
 
-			// Linking Kernel Inputs and Outputs to LMem
-			for(int Layer = 0; Layer < Layers.length; ++Layer)
-			{
-				// Inputs
-				DFELink Input = LMem.addStreamFromLMem("Input" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-				K.getInput("Input" + Layer) <== Input;
+				K.setClock(generateStreamClock("Clk", DesignFreq));
 
-				// Outputs
-				DFELink Output = LMem.addStreamToLMem("Output" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-				Output <== K.getOutput("Output" + Layer);
+				// Linking Kernel Inputs and Outputs to LMem
 
-				// Connect Extra Outputs in case Fcon Layer
-				if(Layers[Layer] == Fcon)
-				{
-					Input = LMem.addStreamFromLMem("PrevOutput" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-					K.getInput("PrevOutput" + Layer) <== Input;
+					// Linking Cycle
+					for(int Layer = 0; Layer < Layers.length; ++Layer)
+					{
+						// Connect Input
+
+							DFELink Input = LMem.addStreamFromLMem("Input" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+							K.getInput("Input" + Layer) <== Input;
+
+						// Connect Output
+
+							DFELink Output = LMem.addStreamToLMem("Output" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+							Output <== K.getOutput("Output" + Layer);
+
+						// Connect Extra Input (Fcon Layer)
+
+							if(Layers[Layer] == Fcon)
+							{
+								Input = LMem.addStreamFromLMem("PrevOutput" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+								K.getInput("PrevOutput" + Layer) <== Input;
+							}
 				}
-			}
 		}
 
 	// 3 --- Engine Interfaces ---  //
@@ -195,7 +235,6 @@ class MovingAverageSimpleManager extends CustomManager
 					Ei.setStream("DataIn", DataType, Size * DataType.sizeInBytes());										// Data to be Written
 					Ei.setLMemLinear("DataInWrite", Start * DataType.sizeInBytes(), Size * DataType.sizeInBytes());			// Write Data
 
-					// This shouldn't have to be here, but ignoreAll isn't working properly
 					// This shouldn't have to be here, but ignoreAll isn't working properly
 					for(int i = 0; i < WeightDims; ++i)
 					{
@@ -420,7 +459,6 @@ class MovingAverageSimpleManager extends CustomManager
 				    				break;
 
 				    		case Conv:
-
 				    				// Get Layer Params
 				    				for(i = 0; i < 5; ++i)
 				    				{
@@ -607,18 +645,6 @@ class MovingAverageSimpleManager extends CustomManager
 
 			EngineParameters params = new EngineParameters(args);
 			MovingAverageSimpleManager m = new MovingAverageSimpleManager(params);
-
-			// Set Pipelining
-			KernelConfiguration CurrKConf = m.getCurrentKernelConfig();
-			CurrKConf.optimization.setCEPipelining(Pipelining);
-			//m.setCurrentKernelConfig(currKConf);
-
-			//m.config.setOnCardMemoryFrequency(LMemFreq);
-
-			// set clock frequency
-			m.setDefaultStreamClockFrequency(DesignFreq);
-
-			// Manager Configs
 
 			// Create Interfaces
 			m.createSlicInterface(InterfaceWrite());				// Write to LMem

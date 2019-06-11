@@ -24,7 +24,7 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddBlock(Net);
 	AddConv(16, 3, 2, 2, 1);
 	AddActi(ReLu);
-	AddConv(16, 3, 1, 0, 4);
+	/*AddConv(16, 3, 1, 0, 4);
 	AddActi(ReLu);
 	AddPool(2, MaxPool, 2);
 	AddFcon(200, 2);
@@ -45,7 +45,7 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddFcon(100, 1);
 	AddActi(Soft);
 
-	SetBurstMult(Net, 0, 128);
+	SetBurstMult(Net, 0, 256);
 
 	//SetBurstMult(Net, 0, 8);
 }

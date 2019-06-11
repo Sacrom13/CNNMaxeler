@@ -1077,7 +1077,7 @@
 										OutputStart,
 										Output);
 
-			Print1DMatrix(Output, OutDims1D);
+			// Print1DMatrix(Output, OutDims1D);
 
 		// Run CPU
 
@@ -1095,7 +1095,7 @@
 
 			ConvertTo1D(TestOutput, TestOutput1D, Net.Blocks[0].Dims[Net.Blocks[0].BlockSize]);
 
-			Print1DMatrix(TestOutput1D, OutDims1D);
+			// Print1DMatrix(TestOutput1D, OutDims1D);
 
 			double Margin = .5e-2;
 			Compare1D(Output, TestOutput1D, OutDims1D, Margin);

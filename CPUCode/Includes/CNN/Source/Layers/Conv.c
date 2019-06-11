@@ -68,7 +68,7 @@
 
         void ConvForwCpu(double*** Input, int* InDims,                   // Input
                          double*** Output,                               // Output
-                         double**** Filters, double* Params)              // Weights + Params
+                         double**** Filters, double* Params)             // Weights + Params
 
         {
             // --- Pad Input --- //
@@ -279,7 +279,7 @@
 
                 // Output has InDims[0] Channels. Delta has NKernels Channels. Weights have Nkernels size and InDims[0] Channels.
                 // In forward propagation, In[InChannel] connects to Out[OutChannel] via Filters[OutChannel][InChannel]. 
-                // To do this Backwards, to Calculate Out[InChannel] need to sum Delta[OutChannel]*Filter[OutChannel][InChannel] for all OutChannels.
+                // To do this Backwards, to Calculate Out[InChannel] need to sum Delta[OutChannel]*Filter[OutChannel][InChannel] for all OutChannels(NKernels).
 
                 // Each iteration Calculates 1 Output Channel
             	for (int channel = 0; channel < InDims[0]; ++channel)          
