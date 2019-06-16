@@ -891,7 +891,7 @@ class MovingAverageSimpleKernel extends Kernel
 
 			// 3.2.2 --- Backward --- //
 
-				/*private void PoolBackward(DFEVar TickCount, int Layer,
+				private void PoolBackward(DFEVar TickCount, int Layer,
 										  int Parallelism, double[] Params, int Padding,
 										  int[] InDims, int[] OutDims,
 										  int BurstMult,
@@ -904,7 +904,7 @@ class MovingAverageSimpleKernel extends Kernel
 					[3] = Stride;
 					*/
 
-					/*// Helper Variables to avoid doing same computation more than once
+					// Helper Variables to avoid doing same computation more than once
 					int DFEStride = Params[3] > 1 ? (int) Params[3] : 2;
 
 					// --------------------------------------------- //
@@ -975,12 +975,11 @@ class MovingAverageSimpleKernel extends Kernel
 					// ---------- 		Output Control		-------- //
 					// --------------------------------------------- //
 
-					DFEVar DataOutEnable = TickCount > FirstOutput;
+					DFEVar DataOutEnable = TickCount > FirstOutput & TickCount < FirstOutput + BurstMult * BurstSizeDataType;
 
+					DFEVar PadEnable = TickCount > InDims[0] * InDims[1] * InDims[1];
 
-					DFEVar PadEnable = constant.var();
-
-
+					DataOutEnable |= PadEnable;
 
 					// --------------------------------------------- //
 					// ---------- 		Calc Output		   ----------//
@@ -998,7 +997,7 @@ class MovingAverageSimpleKernel extends Kernel
 					// Output to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType);
 
-				}*/
+				}
 
 		// 3.3 --- Fcon --- //
 
