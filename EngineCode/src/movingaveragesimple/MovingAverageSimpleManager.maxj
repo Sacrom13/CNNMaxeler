@@ -160,7 +160,7 @@ class MovingAverageSimpleManager extends CustomManager
 				BuildConfig BConf = getBuildConfig();
 
 					// Building Speed
-					BConf.setBuildEffort(Effort.MEDIUM);
+					BConf.setBuildEffort(Effort.HIGH);
 					BConf.setMPPRCostTableSearchRange(1, 4);
 					BConf.setMPPRParallelism(64);
 
@@ -206,7 +206,14 @@ class MovingAverageSimpleManager extends CustomManager
 
 							Output <== K.getOutput("Output" + Layer);
 
-						// Connect Extra Input (Fcon Layer)
+						// Connect Extra Streams if necessary
+
+							if(Layers[Layer] == Pool)
+							{
+								Output = LMem.addStreamToLMem("Mask" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+								Output <== K.getOutput("Mask" + Layer);
+							}
 
 							if(Layers[Layer] == Fcon)
 							{
@@ -347,6 +354,14 @@ class MovingAverageSimpleManager extends CustomManager
 																	Ei.addConstant(0));
 
 											MemStart += TotalMemSize;
+
+											// Mask
+											Ei.setLMemLinear("Mask" + Layer,
+															InputOffset + MemStart + ( (MemControl[Layer] - 1) * OutputSizeBytes),
+															(MemControl[Layer] > 0 ? BurstMult : 0) * BurstSizeBytes);
+
+											MemStart += TotalMemSize;
+
 											break;
 								case Fcon:
 											if(Dims[Layer][0] == 1)

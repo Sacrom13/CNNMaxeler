@@ -187,7 +187,7 @@
             Return Value - Pool Result
         */
 
-        void PoolBackCpu(double*** PrevOutput, int* OutDims, double*** Error,                         // Variable to Calculate Delta
+        void PoolBackCpu(double*** PrevOutput, int* OutDims, double*** Error,                        // Variable to Calculate Delta
                          double*** Mask,                                                             // Variable to Calculate this layer Error
                          double*** Output,                                                           // Variable to Store this layer Error
                          double* Params)                                                             // Params

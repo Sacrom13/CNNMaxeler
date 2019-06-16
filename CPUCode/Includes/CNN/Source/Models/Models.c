@@ -1028,6 +1028,12 @@
 						printf("Stride has to be greater than or equal to 1\n");
 						exit(CNNConstructionError);
 					}
+					if(Stride > FilterSize)
+					{
+						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
+						printf("Stride has to be greater than FilterSize.\n");
+						exit(CNNConstructionError);
+					}
 
 					if(((CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1] - FilterSize) % Stride) != 0)
 					{

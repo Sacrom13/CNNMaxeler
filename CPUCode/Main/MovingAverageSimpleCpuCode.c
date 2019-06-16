@@ -19,25 +19,25 @@
 
 void CreateTestNetwork(Network* Net, int* InDims)
 {
-	/*InitCNN(Net, InDims);
+	InitCNN(Net, InDims);
 
 	AddBlock(Net);
 	AddConv(16, 3, 2, 2, 1);
 	AddActi(ReLu);
-	/*AddConv(16, 3, 1, 0, 4);
+	AddConv(16, 3, 1, 0, 8);
 	AddActi(ReLu);
 	AddPool(2, MaxPool, 2);
-	AddFcon(200, 2);
-	AddActi(ReLu);*/
+	AddFcon(200, 12);
+	AddActi(ReLu);
 
-	InitCNN(Net, InDims);
+	/*InitCNN(Net, InDims);
 
 	AddBlock(Net);
 	AddConv(64, 3, 1, 1, 1);
 	AddActi(ReLu);
 	AddConv(64, 3, 1, 1, 1);
 	AddActi(ReLu);
-	AddPool(2, MaxPool, 2);
+	AddPool(2, MaxPool, 2);*/
 
 	AddBlock(Net);
 	AddFcon(100, 1);
@@ -45,9 +45,9 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	AddFcon(100, 1);
 	AddActi(Soft);
 
-	SetBurstMult(Net, 0, 256);
+	//SetBurstMult(Net, 0, 256);
 
-	//SetBurstMult(Net, 0, 8);
+	SetBurstMult(Net, 0, 4);
 }
 
 int main()
@@ -57,7 +57,7 @@ int main()
 	Network* Net = malloc(sizeof(Network));
 
 	printf("Setting Network\n");
-	int InDims[3] = {3, 224, 224};
+	int InDims[3] = {3, 29, 29};
 
 	CreateTestNetwork(Net, InDims);
 

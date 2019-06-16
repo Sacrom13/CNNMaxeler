@@ -1063,6 +1063,11 @@
 				}
 
 				OutputStart += DimAux;
+
+				if(Net.Blocks[0].Layers[i] == Pool)
+				{
+					OutputStart += DimAux;
+				}
 			}
 
 			int OutDims1D;

@@ -571,10 +571,6 @@ class MovingAverageSimpleKernel extends Kernel
 						}
 					}
 
-					// Get the previous result already in memory
-					DFEVar PrevOutput = io.input("PrevOutput" + Layer, IODataType, DataOutEnable);
-					Output += DataOutEnable ? PrevOutput.cast(ComputationDataType) : 0;
-
 					// --------------------------------------------- //
 					// ---------- 			Output		   ----------//
 					// --------------------------------------------- //
@@ -732,6 +728,16 @@ class MovingAverageSimpleKernel extends Kernel
 
 					// Output to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
+
+					// --------------------------------------------- //
+					// ---------- 		Mask Output	       ----------//
+					// --------------------------------------------- //
+
+					DFEVar WindowOutput = stream.offset(Output, -(XStrideTicks + YStrideTicks*InDims[1]).cast(dfeInt(8)), (int)-((Params[1] - 1) * (InDims[1] + 1)), 0);
+
+					DFEVar MaskOutput = WindowOutput.eq(Output) ? constant.var(1).cast(IODataType) : constant.var(0);
+
+					io.output("Mask" + Layer, MaskOutput.cast(IODataType), IODataType, (TickCount >= ((Enable - 1) * (BurstMult * BurstSizeDataType)) & (TickCount < (Enable) * BurstMult * BurstSizeDataType)));
 				}
 
 				private void MeanPoolForward(DFEVar TickCount, int Layer,
@@ -870,14 +876,129 @@ class MovingAverageSimpleKernel extends Kernel
 
 					// Output to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
+
+					// --------------------------------------------- //
+					// ---------- 		Mask Output	       ----------//
+					// --------------------------------------------- //
+
+					DFEVar WindowOutput = stream.offset(Output, -(XStrideTicks + YStrideTicks*InDims[1]).cast(dfeInt(8)), (int)-((Params[1] - 1) * (InDims[1] + 1)), 0);
+
+					DFEVar MaskOutput = WindowOutput.eq(Output) ? constant.var(1).cast(IODataType) : constant.var(0);
+
+					io.output("Mask" + Layer, MaskOutput.cast(IODataType), IODataType, (TickCount >= ((Enable - 1) * (BurstMult * BurstSizeDataType)) & (TickCount < (Enable) * BurstMult * BurstSizeDataType)));
+
 				}
 
 			// 3.2.2 --- Backward --- //
 
-				private void PoolBackward()
+				/*private void PoolBackward(DFEVar TickCount, int Layer,
+										  int Parallelism, double[] Params, int Padding,
+										  int[] InDims, int[] OutDims,
+										  int BurstMult,
+										  DFEVar Enable, DFEVar FirstOutput)
 				{
+					/*
+					[0] = Act;
+					[1] = FilterSize;		// Pool Size : 2 means 2x2, 3 means 3x3, etc
+					[2] = Type;				// Type: 1 - Max Pooling, 2 - Mean Pooling
+					[3] = Stride;
+					*/
 
-				}
+					/*// Helper Variables to avoid doing same computation more than once
+					int DFEStride = Params[3] > 1 ? (int) Params[3] : 2;
+
+					// --------------------------------------------- //
+					// ----------  Input Position Counters	---------//
+					// --------------------------------------------- //
+
+					// X
+					Count.Params XParams = control.count.makeParams(MathUtils.bitsToAddress(InDims[1]))
+					.withMax(InDims[1])
+					.withEnable(Enable > 0);
+					Counter XCounter = control.count.makeCounter(XParams);
+					DFEVar XTicks = XCounter.getCount().cast(dfeUInt(16));
+
+					// XStride
+					Count.Params XStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & Params[3] > 1 & XTicks < InDims[1] - Params[1]);
+					Counter XStrideCounter = control.count.makeCounter(XStrideParams);
+					DFEVar XStrideTicks = XStrideCounter.getCount().cast(dfeUInt(16));
+
+					// Y
+					Count.Params YParams = control.count.makeParams(MathUtils.bitsToAddress(InDims[1]))
+					.withMax(InDims[1])
+					.withEnable(Enable > 0 & XTicks.eq(InDims[1] - 1));
+					Counter YCounter = control.count.makeCounter(YParams);
+					DFEVar YTicks = YCounter.getCount().cast(dfeUInt(16));
+
+					// YStride
+					Count.Params YStrideParams = control.count.makeParams(MathUtils.bitsToAddress(DFEStride))
+					.withMax(DFEStride)
+					.withEnable(Enable > 0 & Params[3] > 1 & XTicks.eq(InDims[1] - 1) & YTicks < InDims[1] - Params[1]);
+					Counter YStrideCounter = control.count.makeCounter(YStrideParams);
+					DFEVar YStrideTicks = YStrideCounter.getCount().cast(dfeUInt(16));
+
+					// --------------------------------------------- //
+					// ---------- 		Input Control		-------- //
+					// --------------------------------------------- //
+
+					DFEVar DataInEnable = XStrideTicks.eq(0) & YStrideTicks.eq(0);
+
+					// Calculate Delta
+					DFEVar Error = io.input("Error" + Layer, IODataType, DataInEnable);
+					DFEVar FwdOutput = io.input("FwdOutput" + Layer, IODataType, DataInEnable);
+
+					// Activation Function
+					DFEVar Delta = Error;
+					switch((int) Params[0])
+					{
+						case ReLu:
+									Delta = FwdOutput > 0 ? Delta : 0;
+									break;
+
+						case Sigmoid:
+									Delta *= FwdOutput * (1 - FwdOutput);
+									break;
+						case Tanh:
+									Delta *= (1 - FwdOutput*FwdOutput);
+									break;
+					}
+
+					// Stream Control
+					DFEVar MemInput = stream.offset(Delta, -YStrideTicks*InDims[1], (int)((Params[2] - 1) * InDims[1]), 0);
+
+					// Mask
+					DFEVar Mask = io.input("Mask" + Layer, IODataType);
+
+					// --------------------------------------------- //
+					// ---------- 		Output Control		-------- //
+					// --------------------------------------------- //
+
+					DFEVar DataOutEnable = TickCount > FirstOutput;
+
+
+					DFEVar PadEnable = constant.var();
+
+
+
+					// --------------------------------------------- //
+					// ---------- 		Calc Output		   ----------//
+					// --------------------------------------------- //
+
+					DFEVar Output = Mask * MemInput;
+
+					// --------------------------------------------- //
+					// ---------- 		Output		       ----------//
+					// --------------------------------------------- //
+
+					// Output 0 if Padding
+					Output = PadEnable ? 0 : Output;
+
+					// Output to Mem
+					io.output("Output" + Layer, Output.cast(IODataType), IODataType);
+
+				}*/
 
 		// 3.3 --- Fcon --- //
 
