@@ -187,7 +187,7 @@ class MovingAverageSimpleManager extends CustomManager
 
 				// set stream clock frequency
 
-				K.setClock(generateStreamClock("Clk", DesignFreq));
+				K.setClock(generateStreamClock("Clk", 150));
 
 				// Linking Kernel Inputs and Outputs to LMem
 
