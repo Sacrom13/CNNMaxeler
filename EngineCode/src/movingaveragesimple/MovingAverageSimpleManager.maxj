@@ -179,7 +179,7 @@ class MovingAverageSimpleManager extends CustomManager
 				tocpu <== lmem2cpu;
 
 				// Setup Kernel
-				KernelBlock K = addKernel(new MovingAverageSimpleKernel(makeKernelParameters("Kernel"),
+				KernelBlock K = addKernel(new ForwardPropKernel(makeKernelParameters("Kernel"),
 											Layers,
 											Dims, Params, Parallelism, Padding,
 											WeightDims,
@@ -187,7 +187,7 @@ class MovingAverageSimpleManager extends CustomManager
 
 				// set stream clock frequency
 
-				K.setClock(generateStreamClock("Clk", 150));
+				K.setClock(generateStreamClock("Clk", 140));
 
 				// Linking Kernel Inputs and Outputs to LMem
 
