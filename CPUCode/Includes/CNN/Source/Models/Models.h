@@ -11,9 +11,9 @@
 		void FreeCNN(Network* Net);
 
 		void AddBlock(Network* Net);
-		void AddConv(int NKernels, char KernelSize, char Stride, char Padding, char Parallelism);
+		void AddConv(int NKernels, char KernelSize, char Stride, char Padding);
 		void AddPool(char FilterSize, char Type, char Stride);
-		void AddFcon(int OutputSize, char Parallelism);
+		void AddFcon(int OutputSize);
 		void AddActi(char Func);
 		void AddDrop(double DropP);
 

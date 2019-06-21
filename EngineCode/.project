@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>tutorial-chap03-example1-movingaveragesimple_EngineCode</name>
+	<name>CNN_EngineCode</name>
 	<comment></comment>
 	<manageMaxCompiler>true</manageMaxCompiler>
 	<manageMaxGenFD>true</manageMaxGenFD>
-	<manageMaxBlox>true</manageMaxBlox> <maxelerVersion>1.0</maxelerVersion>
+	<manageMaxBlox>true</manageMaxBlox>
+	<maxelerVersion>1.0</maxelerVersion>
 	<maxelerBuildSystemVersion>2</maxelerBuildSystemVersion>
 	<projects>
 	</projects>

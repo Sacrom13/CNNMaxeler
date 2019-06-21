@@ -7,9 +7,30 @@
 		#include <float.h>
 		#include "../../Libs/CNNLibs.h"
 
-	// 2 --- Function Prototypes --- //
+	// 2 --- Ids --- //
 
-		// 2.1 --- Conv --- //
+		// 2.1 --- Layers --- //
+
+			#define Conv 1
+			#define Pool 2
+			#define Fcon 3
+
+		// 2.2 --- Act Funcs --- //
+
+			#define ReLu 1
+			#define Sigmoid 2
+			#define Tanh 3
+			#define Soft 4
+
+		// 2.3 --- Pool types --- //
+
+			#define MaxPool 1
+			#define MeanPool 2
+
+
+	// 3 --- Function Prototypes --- //
+
+		// 3.1 --- Conv --- //
 
 			void ConvForwCpu(double*** Input, int* InDims,           // Input
 		                     double*** Output,                       // Output
@@ -21,7 +42,7 @@
 		                     double**** Filters, double* Params,                      	// Weights + Params
 		                     double LearningRate);                                    	// Learning Rate
 
-		// 2.2 --- Fcon --- //
+		// 3.2 --- Fcon --- //
 
 			void FconForwCpu(double* Input, int InDim, 				// Input
 							 double* Output, int OutDim, 			// Output
@@ -34,7 +55,7 @@
 							 double** Weights, double* Params, 							// Weights + Params
 							 double LearningRate);										// Learning Rate
 
-		// 2.3 --- Pool --- //
+		// 3.3 --- Pool --- //
 
 			void PoolForwCpu(double*** Input, int* InDims,           // Input
 	                         double*** Mask,                         // Mask to fill up

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <maxCompilerManager version="2">
-<enginePart internalEngineSubproject="tutorial-chap03-example1-movingaveragesimple_EngineCode" isSrcBin="false" isUseDefaultSelected="false" outputLocation="/tutorial-chap03-example1-movingaveragesimple_EngineCode/bin" projectName="tutorial-chap03-example1-movingaveragesimple"/>
-<cpuPart internalCpuSubproject="tutorial-chap03-example1-movingaveragesimple_CPUCode"/>
+<enginePart internalEngineSubproject="CNN_EngineCode" isSrcBin="false" isUseDefaultSelected="false" outputLocation="/CNN_EngineCode/bin" projectName="CNN"/>
+<cpuPart internalCpuSubproject="CNN_CPUCode"/>
+<watchedFiles/>
 </maxCompilerManager>

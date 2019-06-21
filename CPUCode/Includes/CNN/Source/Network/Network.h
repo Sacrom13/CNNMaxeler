@@ -1,62 +1,36 @@
+/*
+ * Network.h
+ *
+ *  Created on: Jun 19, 2019
+ *      Author: specs
+ */
+
 #ifndef NETWORK_DEFINED
 #define NETWORK_DEFINED
 
-	// 1 --- Required Libs --- //
+	// 1 --- Network Libs --- //
 
-		#include <unistd.h>
-		#include <stdio.h>
-		#include <stdlib.h>
-		#include <stdint.h>
-		#include "../../Libs/CNNLibs.h"
+		#include "CPU/CPUNetwork.h"
+		#include "DFE/DFENetwork.h"
 
 	// 2 --- Structures --- //
-	
-		// 2.1 --- DFEPropagation Params --- //
 
-			// 2.1.1 --- Forward Prop Params --- //
+		// 2.1 --- Block --- //
 
-				typedef struct
-				{
-					int InputOffset;			// Input Offset in LMem
+		typedef struct
+		{
+			int** Dims;					// Dimensions of data in this Block
 
-					char* Parallelism;			// Level of Parallelism of each layer
+			char* Layers;				// Array Containing Layers
+			int BlockSize;				// Size of Layers and Dims
 
-		  			int BurstMult;				// Multiplier for DFEBurstSize. BurstSize for Galava is 192 Bytes. if DFEBurstMult = 2 then 192*2 Bytes are Calculated at once
+			double***** Weights;		// Weights for Layers that have them. For pooling Layer this will hold the Mask
 
-					uint32_t NCalls;			// How many times DFE has to be ran for this Block to finish Computation
+			double** LayerParams;		// Arrays Containing Layer Parameters
 
-					uint32_t** FirstOutputs;	// First Output Point for a given Layer of a given Call
-					uint32_t** MemControl;		// Call Counter for DFE
+		} Block;
 
-					double** DFEWeights;		// Weight Setup for each DFE Iteration
-
-				} DFEForwParams;
-
-		// 2.2 --- Backward Prop Params --- //
-
-				typedef struct
-				{
-					
-				} DFEBackParams;
-
-		// 2.2 --- Block --- //
-
-			typedef struct
-			{
-				int** Dims;					// Dimensions of data in this Block
-
-				char* Layers;				// Array Containing Layers
-				int BlockSize;				// Size of Layers and Dims
-
-				double***** Weights;		// Weights for Layers that have them. For pooling Layer this will hold the Mask
-
-				double** LayerParams;		// Arrays Containing Layer Parameters
-
-				DFEForwParams FParams;		// ForwardParams for DFE
-				DFEBackParams BParams;		// BackwardParams for DFE
-			} Block;
-
-		// 2.3 --- Network --- //
+		// 2.2 --- Network --- //
 
 			typedef struct
 			{
@@ -81,61 +55,27 @@
 		#define PrecedenceError -6
 		#define RepeatError -7
 
-	// 4 --- IDs --- //
-		
-		// 4.1 --- Layers --- //
+	// 4 --- Default Parameters --- //
 
-			#define Conv 1
-			#define Pool 2
-			#define Fcon 3
-		
-		// 4.2 --- Layer Params --- //
+		#define DefBatchSize 64
+		#define DefLearningRate 0.01
+		#define DefMomentum 0.01
+		#define DefEFunc CrossEnt
 
-			// 4.2.1 --- Act Funcs --- //
+	// 5 --- Function Prototypes --- //
 
-				#define ReLu 1
-				#define Sigmoid 2
-				#define Tanh 3
-				#define Soft 4
-
-			// 4.2.2 --- Max Pool --- //
-
-				#define MaxPool 1
-				#define MeanPool 2
-
-			// 4.2.3 --- Error Funcs --- //
-
-				#define CrossEnt 1
-				#define MSE 2
-
-	// 5 --- Default Parameters --- //
-
-		// 5.1 --- Design --- //
-
-			#define DefFreq 100
-			#define DefPip 1
-			#define DefBurstMult 1
-
-			#define BurstSizeBytes 192				// Burst Size in Bytes, implicit for Galava DFE
-			#define BurstSizeDataType 24			// Burst Size in Doubles
-
-		// 5.2 --- Network --- //
-
-			#define DefBatchSize 64
-			#define DefLearningRate 0.01
-			#define DefMomentum 0.01
-			#define DefEFunc CrossEnt
-
-	// 6 --- Function Prototypes --- //
-
-			void SetLMemFreq(int Freq);
-			void SetDesignFreq(int Freq);
-			void SetPipelining(int Pip);
+		// 5.1 --- CPU --- //
 
 			int Classify(Network Net, double*** Input);
 			double CalcTestAccuracy(Network Net, double**** Inputs, double** Labels, int NSamples);
 
 			void CNNTrainCPU(Network Net, double**** Inputs, double** Labels, int DataSize, int MaxEpochs, double GoalError, double GoalAccuracy);
 
+		// 5.2 --- DFE --- //
+
+			void SetLMemFreq(int Freq);
+			void SetDesignFreq(int Freq);
+
 			double* CNNForwardDFE(Network Net, double*** input);
+
 #endif

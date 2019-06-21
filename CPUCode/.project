@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>tutorial-chap03-example1-movingaveragesimple_CPUCode</name>
+	<name>CNN_CPUCode</name>
 	<comment></comment>
 	<manageMaxCompiler>true</manageMaxCompiler>
 	<manageMaxGenFD>true</manageMaxGenFD>

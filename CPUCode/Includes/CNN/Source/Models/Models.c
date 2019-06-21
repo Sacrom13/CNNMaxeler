@@ -13,7 +13,6 @@
 			2.3.2 - LearningRate
 			2.3.3 - Momentum
 			2.3.4 - Error Func
-			2.3.5 - BurstMult
 		2.4 - AddBlock
 		2.5 - AddLayers
 			2.5.1 - Conv
@@ -112,10 +111,6 @@
 		{
 			for(int i = 0; i < Net->TotalBlocks; ++i)
 			{
-				// --- Free Parallelism --- //
-
-					free(Net->Blocks[i].FParams.Parallelism);
-
 				// --- Free Weights + Params --- //
 
 					for(int j = 0; j < Net->Blocks[i].BlockSize; ++j)
@@ -152,21 +147,6 @@
 						}
 					}
 					free(Net->Blocks[i].Weights);
-
-				// --- Free DFE Params --- //
-
-					for(int j = 0; j < (int) Net->Blocks[i].FParams.NCalls; ++j)
-					{
-						free(Net->Blocks[i].FParams.FirstOutputs[j]);
-						free(Net->Blocks[i].FParams.MemControl[j]);
-
-						free(Net->Blocks[i].FParams.DFEWeights[j]);
-					}
-
-					free(Net->Blocks[i].FParams.FirstOutputs);
-					free(Net->Blocks[i].FParams.MemControl);
-
-					free(Net->Blocks[i].FParams.DFEWeights);
 
 				// --- Free Dims --- //
 
@@ -256,421 +236,6 @@
 				Net->EFunc = Func;
 			}
 
-		// 2.3.5 --- BurstMult --- //
-
-			/*
-				Sets BurstMultiplier
-
-				Net - Network to consider
-				Block - Block to consider
-				BM - Burst Multiplier
-
-				return value - nothing
-			*/
-
-			void SetBurstMult(Network* Net, int Block, int BM)
-			{
-				// Calculate new Output Size
-				int OutputSize = BM * BurstSizeDataType;
-
-				// Check if BurstMult is valid
-				if(BM < 1)
-				{
-					printf("Cannot set BurstSize.\n");
-					printf("BurstMult has greater than or equal to 1.");
-				}
-
-				int WeightDims = 0;
-				char FconFlag = 0;
-				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
-				{
-					switch(Net->Blocks[Block].Layers[Layer])
-					{
-						case Conv:
-									// Check if Output Size does not exceed 2 channels at once
-									if(BM * BurstSizeDataType >= 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
-									{
-										printf("Cannot set BurstSize.\n");
-										printf("Layer %d(Conv) in Block %d has Output Dims %dx%d\n", Layer + 1, Block + 1, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][1]);
-										printf("BurstMult*BurstSize = %dx%d =  %d, which has to be less than 2*%d*%d = %d\n", BM, BurstSizeDataType, BM * BurstSizeDataType, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][1], 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][1]);
-										exit(CNNConstructionError);
-									}
-
-									// Check if Weights fit in FMem
-									WeightDims = 2 * Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].LayerParams[Layer][2] * Net->Blocks[Block].LayerParams[Layer][2];
-									if(WeightDims > pow(2, 16))
-									{
-										printf("Layer %d(Conv) in Block %d has invalid Kernel Dimensions\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-										printf("2 * InChannels(%d) * KernelSize*KernelSize (%dx%d) = %d. This cannot be greater than 65536\n", Net->Blocks[Block].Dims[Layer][0], (int)Net->Blocks[Block].LayerParams[Layer][2], (int)Net->Blocks[Block].LayerParams[Layer][2], (int)(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].LayerParams[Layer][2] * Net->Blocks[Block].LayerParams[Layer][2]));
-										exit(CNNConstructionError);
-									}
-									break;
-						case Fcon:
-									// If Bm > 8 Weights don't fit in FMem.
-										if(BM > 8)
-										{
-											printf("Cannot set BurstSize.\n");
-											printf("Layer %d(Fcon) in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-											printf("Blocks with Fcon Layers must have BurstMult < 7\n");
-											exit(CNNConstructionError);
-										}
-
-									// Check if Weights fit in FMem
-										if(FconFlag == 0)
-										{
-											WeightDims += pow(BM * BurstSizeDataType, 2);
-											if(WeightDims > pow(2, 16))
-											{
-												printf("Layer %d(Fcon) in Block %d has exceeded Weight Dimensions\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-												printf("TotalWeightDims = %d, which cannot be greater than 65536.\n", WeightDims);
-												printf("Try lowering BurstSize using SetBurstMult()");
-												exit(CNNConstructionError);
-											}
-											FconFlag = 1;
-										}
-										else
-										{
-											WeightDims = 2 * pow(BM * BurstSizeDataType, 2);
-											if(WeightDims > pow(2, 16))
-											{
-												printf("Layer %d(Fcon) in Block %d has exceeded Weight Dimensions\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-												printf("TotalWeightDims = %d, which cannot be greater than 65536.\n", WeightDims);
-												printf("Try lowering BurstSize using SetBurstMult()");
-												exit(CNNConstructionError);
-											}
-										}
-
-									// Check if Parallelism is allowed
-										if(Net->Blocks[Block].FParams.Parallelism[Layer] > OutputSize/2)
-										{
-											printf("Fcon Layer %d in Block %d.\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
-											printf("Parallelism (%d), cannot be greater than BurstMult*24/2(%d)\n", Net->Blocks[Block].FParams.Parallelism[Layer], OutputSize/2);
-											exit(CNNConstructionError);
-										}
-
-									break;
-					}
-				}
-
-				// Free previous Params
-				if(Net->Blocks[Block].FParams.NCalls > 0)
-				{
-					for(int CurrentCall = 0; CurrentCall < (int) Net->Blocks[Block].FParams.NCalls; ++CurrentCall)
-					{
-						free(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall]);
-						free(Net->Blocks[Block].FParams.MemControl[CurrentCall]);;
-						free(Net->Blocks[Block].FParams.DFEWeights[CurrentCall]);
-					}
-
-					free(Net->Blocks[Block].FParams.FirstOutputs);
-					free(Net->Blocks[Block].FParams.MemControl);
-					free(Net->Blocks[Block].FParams.DFEWeights);
-				}
-
-				// Set Burst Multiplier
-				Net->Blocks[Block].FParams.BurstMult = BM;
-
-				// --- Calculate Input Offset --- //
-
-				Net->Blocks[0].FParams.InputOffset = 0;
-				for(int i = 0; i < Net->TotalBlocks - 1; ++i)
-				{
-					Net->Blocks[i + 1].FParams.InputOffset = Net->Blocks[i].FParams.InputOffset;
-					for(int Layer = 0; Layer < Net->Blocks[i].BlockSize; ++Layer)
-					{
-						int LayerMemSize = Net->Blocks[i].Dims[Layer][0] * Net->Blocks[i].Dims[Layer][1] * Net->Blocks[i].Dims[Layer][2];
-						if(LayerMemSize % OutputSize != 0)
-						{
-							LayerMemSize += (OutputSize - (LayerMemSize % OutputSize));
-						}
-						Net->Blocks[i + 1].FParams.InputOffset += (LayerMemSize*sizeof(double));
-					}
-				}
-
-				// --- Find out NCalls --- //
-
-					int **LayerCalls = malloc((Net->Blocks[Block].BlockSize) * sizeof(int*));
-					if(LayerCalls == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
-					for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
-					{
-						LayerCalls[Layer] = malloc(2 * sizeof(int));
-						if(LayerCalls[Layer] == NULL)
-						{
-							printf("Memory Allocation Error.\n");
-							exit(MemoryError);
-						}
-
-						switch(Net->Blocks[Block].Layers[Layer])
-						{
-							case Conv:
-										if(Layer == 0)
-										{
-											LayerCalls[Layer][0] = 0;
-										}
-										else
-										{
-											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-										}
-										LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-										break;
-
-							case Pool:
-										if(Layer == 0)
-										{
-											LayerCalls[Layer][0] = 0;
-											LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-										}
-										else
-										{
-											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 2 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-											LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-										}
-
-										break;
-
-							case Fcon: 
-										if(Layer == 0)
-										{
-											LayerCalls[Layer][0] = 0;
-										}
-										else
-										{
-											//LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-											if(Net->Blocks[Block].Layers[Layer - 1] == Fcon)
-											{
-												LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-											}
-											else
-											{
-												LayerCalls[Layer][0] = LayerCalls[Layer - 1][0] + 1;
-											}
-										}
-										LayerCalls[Layer][1] = LayerCalls[Layer][0] + (int)(ceil(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2] / (float) OutputSize) * ceil(Net->Blocks[Block].Dims[Layer + 1][2] / (float)OutputSize));
-										break;
-						}
-					}
-					Net->Blocks[Block].FParams.NCalls = LayerCalls[Net->Blocks[Block].BlockSize - 1][1];
-
-				// Allocations
-
-					// First Outputs
-					Net->Blocks[Block].FParams.FirstOutputs = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
-					if(Net->Blocks[Block].FParams.FirstOutputs == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
-					// Mem Control
-					Net->Blocks[Block].FParams.MemControl = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(uint32_t*));
-					if(Net->Blocks[Block].FParams.MemControl == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
-					// DFEWeights
-					Net->Blocks[Block].FParams.DFEWeights = malloc(Net->Blocks[Block].FParams.NCalls * sizeof(double*));
-					if(Net->Blocks[Block].FParams.DFEWeights == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
-					for(int CurrentCall = 0; CurrentCall < (int) Net->Blocks[Block].FParams.NCalls; ++CurrentCall)
-					{
-						// First Outputs
-						Net->Blocks[Block].FParams.FirstOutputs[CurrentCall] = calloc(Net->Blocks[Block].BlockSize, sizeof(uint32_t));
-						if(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall] == NULL)
-						{
-							printf("Memory Allocation Error.\n");
-							exit(MemoryError);
-						}
-
-						// Mem Control
-						Net->Blocks[Block].FParams.MemControl[CurrentCall] = calloc(Net->Blocks[Block].BlockSize, sizeof(uint32_t));
-						if(Net->Blocks[Block].FParams.MemControl[CurrentCall] == NULL)
-						{
-							printf("Memory Allocation Error.\n");
-							exit(MemoryError);
-						}
-
-						// DFEWeights
-						Net->Blocks[Block].FParams.DFEWeights[CurrentCall] = calloc(pow(2, 16), sizeof(double));
-						if(Net->Blocks[Block].FParams.DFEWeights[CurrentCall] == NULL)
-						{
-							printf("Memory Allocation Error.\n");
-							exit(MemoryError);
-						}
-					}
-
-				int* pos = calloc(Net->Blocks[Block].FParams.NCalls, sizeof(int));
-				if(pos == NULL)
-				{
-					printf("Memory Allocation Error.\n");
-					exit(MemoryError);
-				}
-
-				int CurrentKernel;
-
-				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
-				{
-					switch(Net->Blocks[Block].Layers[Layer])
-					{
-						case Conv:
-									// Setup Variables for this Kernel
-									CurrentKernel = 0;
-
-									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
-									{
-										//printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
-
-										// First Outputs
-										if(CurrentCall - LayerCalls[Layer][0] == 0)
-										{
-											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = 0;
-										}
-										else
-										{
-											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = Net->Blocks[Block].FParams.FirstOutputs[CurrentCall - 1][Layer] + OutputSize;
-											if((int)Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] > Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
-											{
-												Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] % (Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2]);
-											}
-										}
-
-										// Weights
-										for(int Kernel = 0; Kernel < 2; ++Kernel)
-										{
-											for(int Channel = 0; Channel < Net->Blocks[Block].Dims[Layer][0]; ++Channel)
-											{
-												for(int y = 0; y < Net->Blocks[Block].LayerParams[Layer][2]; ++y)
-												{
-													for(int x = 0; x < Net->Blocks[Block].LayerParams[Layer][2]; ++x)
-													{
-														if(CurrentKernel + Kernel != Net->Blocks[Block].Dims[Layer + 1][0])
-														{
-															Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = Net->Blocks[Block].Weights[Layer][CurrentKernel + Kernel][Channel][y][x];
-														}
-														else
-														{
-															Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = 0;
-														}
-														++pos[CurrentCall];
-													}
-												}
-											}
-										}
-										if((int)Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] + OutputSize > Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
-										{
-											CurrentKernel++;
-										}
-
-										// Mem Control
-										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 1 + CurrentCall - LayerCalls[Layer][0];
-									}
-
-									break;
-						case Pool:
-
-									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
-									{
-										//printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
-
-										// First Outputs
-										if(CurrentCall - LayerCalls[Layer][0] == 0)
-										{
-											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = 0;
-										}
-										else
-										{
-											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = Net->Blocks[Block].FParams.FirstOutputs[CurrentCall - 1][Layer] + OutputSize;
-										}
-
-										// Mem Control
-										Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 1 + CurrentCall - LayerCalls[Layer][0];
-									}
-
-									break;
-
-						case Fcon:
-									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
-									{
-										//printf("\33[2KSetting Block %d, Layer %d, (%d/%d)\r", Block, Layer, CurrentCall - LayerCalls[Layer][0], LayerCalls[Layer][1] - LayerCalls[Layer][0]);
-
-										// First Outputs ( Used as Input Mem Control in this layer)
-										if(CurrentCall - LayerCalls[Layer][0] == 0)
-										{
-											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = 0;
-										}
-										else
-										{
-											Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = Net->Blocks[Block].FParams.FirstOutputs[CurrentCall - 1][Layer] + 1;
-											if((int)(BurstSizeDataType * BM * Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer]) >= Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2])
-											{
-												Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] = 0;
-											}
-										}
-										
-										// Output Mem Control
-										if(CurrentCall - LayerCalls[Layer][0] == 0)
-										{
-											Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = 1;
-										}
-										else
-										{
-											if(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] == 0)
-											{
-												Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = Net->Blocks[Block].FParams.MemControl[CurrentCall - 1][Layer] + 1;
-											}
-											else
-											{
-												Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] = Net->Blocks[Block].FParams.MemControl[CurrentCall - 1][Layer];
-											}
-										}
-
-										// Weights
-										for(int i = 0; i < BurstSizeDataType * BM; ++i)
-										{
-											for(int j = 0; j < OutputSize; ++j)
-											{
-												if((int)(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i) < Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2])
-												{
-													if((int)(BM * BurstSizeDataType * (Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] - 1) + j) < Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
-													{
-														Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = Net->Blocks[Block].Weights[Layer][0][0][(Net->Blocks[Block].FParams.FirstOutputs[CurrentCall][Layer] * BurstSizeDataType * BM + i)][BM * BurstSizeDataType * (Net->Blocks[Block].FParams.MemControl[CurrentCall][Layer] - 1) + j];
-													}
-													else
-													{
-														Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = 0;
-													}
-												}
-												else
-												{
-													Net->Blocks[Block].FParams.DFEWeights[CurrentCall][pos[CurrentCall]] = 0;
-												}
-												++pos[CurrentCall];
-											}
-										}
-									}
-
-									break;
-					}
-				}
-				//printf("\33[2K");
-				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
-				{
-					free(LayerCalls[Layer]);
-				}
-				free(LayerCalls);
-				free(pos);
-			}
-
 	// 2.4 --- Add Block --- //
 
 		/*
@@ -732,10 +297,6 @@
 
 				Net->Blocks[Net->TotalBlocks].BlockSize = 0;
 
-			// --- Set Parallelism --- //
-
-				Net->Blocks[Net->TotalBlocks].FParams.Parallelism = malloc(sizeof(char));
-
 			// --- Set Weights --- //
 
 				Net->Blocks[Net->TotalBlocks].Weights = malloc(sizeof(double****));
@@ -743,23 +304,6 @@
 			// --- Set LayerParams --- //
 
 				Net->Blocks[Net->TotalBlocks].LayerParams = malloc(sizeof(double*));
-
-			// --- Set DFE Params --- //
-
-
-				Net->Blocks[Net->TotalBlocks].FParams.NCalls = 0;
-
-				Net->Blocks[Net->TotalBlocks].FParams.FirstOutputs = malloc(sizeof(uint32_t*));
-				Net->Blocks[Net->TotalBlocks].FParams.MemControl = malloc(sizeof(uint32_t*));
-
-				Net->Blocks[Net->TotalBlocks].FParams.DFEWeights = malloc(sizeof(double*));
-
-			// --- Set Burst Mult --- //
-
-				if(Net->TotalBlocks != 0)
-				{
-					SetBurstMult(Net, Net->TotalBlocks - 1, DefBurstMult);
-				}
 		}
 
 	// 2.5 --- Add Layers --- //
@@ -773,12 +317,11 @@
 				KernelSize - Size of Kernels in this Layer
 				Stride - Amount of Pixels Kernel Moves at a time
 				Padding - Amount of Pixels Added to Input Volume before Computation
-				Parallelism - How many Channels are calculated at once.
 
 				return value - nothing
 			*/
 
-			void AddConv(int NKernels, char KernelSize, char Stride, char Padding, char Parallelism)
+			void AddConv(int NKernels, char KernelSize, char Stride, char Padding)
 			{
 				// --- Check if CNNInit has been called --- //
 
@@ -844,28 +387,8 @@
 						printf("Padding has to be greater than or equal to 0\n");
 						exit(CNNConstructionError);
 					}
-					if(Parallelism < 1)
-					{
-						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
-						printf("Parallelism has to be greater than or equal to 1\n");
-						exit(CNNConstructionError);
-					}
 
-					if((CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0] % Parallelism) != 0)
-					{
-						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
-						printf("Input has %d Channels, which does not divide into Parallelism ( %d ) with remainder 0.", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0], Parallelism);
-						exit(CNNConstructionError);
-					}
-
-					if((CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0] % Parallelism) != 0)
-					{
-						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
-						printf("Parallelism (%d) cannot be greater than InputChannels/2 (%d).", Parallelism, (int)(CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][0] / (float)2));
-						exit(CNNConstructionError);
-					}
- 
-				// --- Set Layer and Parallelism level --- //
+				// --- Set Layer --- //
 
 					CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers = realloc(CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers, (CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1) * sizeof(char));
 					if(CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers == NULL)
@@ -874,15 +397,7 @@
 						exit(MemoryError);
 					}
 
-					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism = realloc(CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism, (CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1) * sizeof(char));
-					if(CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
 					CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = Conv;						// Conv ID num
-					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = Parallelism;	// How fast computation runs
 
 				// --- Set Params --- //
 
@@ -1043,7 +558,7 @@
 						exit(CNNConstructionError);
 					}
 
-				// --- Set Layer and Parallelism --- //
+				// --- Set Layer --- //
 
 					CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers = realloc(CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers, (CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1) * sizeof(char));
 					if(CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers == NULL)
@@ -1052,15 +567,7 @@
 						exit(MemoryError);
 					}
 
-					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism = realloc(CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism, (CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1) * sizeof(char));
-					if(CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
 					CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = Pool;
-					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = 1;
 
 				// --- Set Params --- //
 
@@ -1137,12 +644,11 @@
 				Add an Fcon Layer to the Current Block
 
 				Output Size - Amount of Output Neurons
-				Parallelism - How fast computation is done
 
 				return value - nothing
 			*/
 
-			void AddFcon(int OutputSize, char Parallelism)
+			void AddFcon(int OutputSize)
 			{
 				// --- Check if CNNInit has been called --- //
 
@@ -1179,14 +685,8 @@
 						printf("OutputSize has to be greater than or equal to 1\n");
 						exit(CNNConstructionError);
 					}
-					if(Parallelism < 1)
-					{
-						printf("Layer %d in Block %d has invalid Params.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
-						printf("Parallelism has to be greater than or equal to 1\n");
-						exit(CNNConstructionError);
-					}
 
-				// --- Set Layer and Parallelism --- //
+				// --- Set Layer --- //
 
 					CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers = realloc(CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers, (CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1) * sizeof(char));
 					if(CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers == NULL)
@@ -1195,17 +695,7 @@
 						exit(MemoryError);
 					}
 
-					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism = realloc(CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism, (CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1) * sizeof(char));
-					if(CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism == NULL)
-					{
-						printf("Memory Allocation Error.\n");
-						exit(MemoryError);
-					}
-
 					CurrentNet->Blocks[CurrentNet->TotalBlocks].Layers[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = Fcon;
-					CurrentNet->Blocks[CurrentNet->TotalBlocks].FParams.Parallelism[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize] = Parallelism;
-
-
 				
 				//  --- Set Params --- //
 
@@ -1272,7 +762,7 @@
 			/*
 				Add an Activation Layer to the Current Block
 				
-				Parallelism - How many Outputs ( In Multiples of 48 ) are Calculated each time the DFE is Ran. Para = 1 means 48 Outputs. If NOutputs < 48 then just make this Param 1
+				Func - Activation function
 
 				return value - nothing
 			*/
@@ -1319,10 +809,6 @@
 
 					if(Func == Soft)
 					{
-						// --- Set Burst Mult of Last Block --- //
-							
-							SetBurstMult(CurrentNet, CurrentNet->TotalBlocks, DefBurstMult);
-						
 						CurrentNet->TotalBlocks++;
 					}
 			}
@@ -1332,7 +818,7 @@
 			/*
 				Add a Dropout to the Current Block
 				
-				Parallelism - How many Outputs ( In Multiples of 48 ) are Calculated each time the DFE is Ran. Para = 1 means 48 Outputs. If NOutputs < 48 then just make this Param 1
+				DropP - Dropout Probability
 
 				return value - nothing
 			*/
@@ -1392,29 +878,29 @@
 			InitCNN(Net, InDims);
 
 			AddBlock(Net);
-			AddConv(96, 11, 4, 0, 1);
+			AddConv(96, 11, 4, 0);
 			AddActi(ReLu);
 			AddPool(3, MaxPool, 2);
-			AddConv(256, 5, 1, 2, 1);
+			AddConv(256, 5, 1, 2);
 			AddActi(ReLu);
 			AddPool(3, MaxPool, 2);
 			
 			AddBlock(Net);
-			AddConv(384, 3, 1, 1, 1);
+			AddConv(384, 3, 1, 1);
 			AddActi(ReLu);
-			AddConv(384, 3, 1, 1, 1);
+			AddConv(384, 3, 1, 1);
 			AddActi(ReLu);
-			AddConv(256, 3, 1, 1, 1);
+			AddConv(256, 3, 1, 1);
 			AddPool(3, MaxPool, 2);
 
 			AddBlock(Net);
-			AddFcon(4096, 1);
+			AddFcon(4096);
 			AddActi(ReLu);
 			AddDrop(0.5);
-			AddFcon(4096, 1);
+			AddFcon(4096);
 			AddActi(ReLu);
 			AddDrop(0.5);
-			AddFcon(1000, 1);
+			AddFcon(1000);
 			AddDrop(0.5);
 			AddActi(Soft);
 		}
@@ -1435,51 +921,44 @@
 			InitCNN(Net, InDims);
 
 			AddBlock(Net);
-			AddConv(64, 3, 1, 1, 1);
+			AddConv(64, 3, 1, 1);
 			AddActi(ReLu);
-			AddConv(64, 3, 1, 1, 1);
+			AddConv(64, 3, 1, 1);
 			AddActi(ReLu);
 			AddPool(2, MaxPool, 2);
 			
 			AddBlock(Net);
-			AddConv(128, 3, 1, 1, 1);
+			AddConv(128, 3, 1, 1);
 			AddActi(ReLu);
-			AddConv(128, 3, 1, 1, 1);
-			AddActi(ReLu);
-			AddPool(2, MaxPool, 2);
-
-			AddBlock(Net);
-			AddConv(256, 3, 1, 1, 1);
-			AddActi(ReLu);
-			AddConv(256, 3, 1, 1, 1);
-			AddActi(ReLu);
-			AddConv(256, 3, 1, 1, 1);
+			AddConv(128, 3, 1, 1);
 			AddActi(ReLu);
 			AddPool(2, MaxPool, 2);
 
 			AddBlock(Net);
-			AddConv(512, 3, 1, 1, 1);
+			AddConv(256, 3, 1, 1);
 			AddActi(ReLu);
-			AddConv(512, 3, 1, 1, 1);
+			AddConv(256, 3, 1, 1);
 			AddActi(ReLu);
-			AddConv(512, 3, 1, 1, 1);
+			AddConv(256, 3, 1, 1);
 			AddActi(ReLu);
 			AddPool(2, MaxPool, 2);
 
 			AddBlock(Net);
-			AddFcon(4096, 1);
+			AddConv(512, 3, 1, 1);
 			AddActi(ReLu);
-			AddFcon(4096, 1);
+			AddConv(512, 3, 1, 1);
 			AddActi(ReLu);
-			AddFcon(1000, 1);
+			AddConv(512, 3, 1, 1);
+			AddActi(ReLu);
+			AddPool(2, MaxPool, 2);
+
+			AddBlock(Net);
+			AddFcon(4096);
+			AddActi(ReLu);
+			AddFcon(4096);
+			AddActi(ReLu);
+			AddFcon(1000);
 			AddActi(Soft);
-
-			// Possible Burst Mult Setup
-			SetBurstMult(Net, 0, 2048);
-			SetBurstMult(Net, 1, 1024);
-			SetBurstMult(Net, 2, 256);
-			SetBurstMult(Net, 3, 64);
-			SetBurstMult(Net, 4, 8);
 		}
 
 // 4 --- Print Arch --- //
@@ -1497,7 +976,7 @@
 		printf("Total Blocks = %d, InputDims = %dx%dx%d\n\n", Net->TotalBlocks, Net->Blocks[0].Dims[0][0], Net->Blocks[0].Dims[0][1], Net->Blocks[0].Dims[0][1]);
 		for(int i = 0; i < Net->TotalBlocks; ++i)
 		{
-			printf("Block %d : Layer\t  Parameters\t\t  Paralellism\t  OutputSize\n",i + 1);
+			printf("Block %d : Layer\t  Parameters\t\t  OutputSize\n",i + 1);
 			for(int j = 0; j < Net->Blocks[i].BlockSize; ++j)
 			{
 				printf("\t  ");
@@ -1584,11 +1063,11 @@
 				}
 				if(flag == 0)
 				{
-					printf("\t  %d\t\t  %dx%dx%d\n", Net->Blocks[i].FParams.Parallelism[j], Net->Blocks[i].Dims[j+1][0], Net->Blocks[i].Dims[j+1][1], Net->Blocks[i].Dims[j+1][1]);
+					printf("\t\t  %dx%dx%d\n", Net->Blocks[i].Dims[j+1][0], Net->Blocks[i].Dims[j+1][1], Net->Blocks[i].Dims[j+1][1]);
 				}
 				else
 				{
-					printf("\t  %d\t\t  1x%d\n", Net->Blocks[i].FParams.Parallelism[j], Net->Blocks[i].Dims[j+1][2]);
+					printf("\t\t  1x%d\n", Net->Blocks[i].Dims[j+1][2]);
 				}
 			}
 			printf("\n");

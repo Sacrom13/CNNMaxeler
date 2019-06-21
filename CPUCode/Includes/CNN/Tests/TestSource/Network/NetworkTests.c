@@ -20,13 +20,12 @@
 		Dims[1] = 28;
 		Dims[2] = 28;
 
-		int Freq = 200, Pip = 2, Bs = 64;
+		int Freq = 200, Bs = 64;
 		char EFunc = CrossEnt;
 		double Lr = 0.01, Mom = 0.02;
 
 		SetLMemFreq(Freq);
 		SetDesignFreq(Freq);
-		SetPipelining(Pip);
 
 		SetErrorFunc(Net, EFunc);
 		SetBatchSize(Net, Bs);
@@ -36,37 +35,37 @@
 		InitCNN(Net, Dims);
 
 		int NKernels = 32;
-		char KernelSize = 3, Stride = 1, Padding = 0, Parallelism = 1;
+		char KernelSize = 3, Stride = 1, Padding = 0;
 		char FilterSize = 2, Type = MaxPool;
 		char Func = Sigmoid;
 		int OutputSize = 4096;
 		double DropP = 0.25;
 
 		AddBlock(Net);
-		AddConv(NKernels, KernelSize, Stride, Padding, Parallelism);
+		AddConv(NKernels, KernelSize, Stride, Padding);
 		AddActi(Func);
-		AddConv(NKernels, KernelSize, Stride, Padding, 2*Parallelism);
-		AddPool(FilterSize, Type, 2*Stride, Parallelism);
-		AddActi(Func);
-
-		AddBlock(Net);
-		AddConv(2* NKernels, KernelSize, Stride, Padding, 120*Parallelism);
-		AddActi(Func);
-		AddConv(2* NKernels, KernelSize, Stride, Padding, 50*Parallelism);
-		AddPool(FilterSize, Type, 2*Stride, Parallelism);
+		AddConv(NKernels, KernelSize, Stride, Padding);
+		AddPool(FilterSize, Type, 2*Stride);
 		AddActi(Func);
 
 		AddBlock(Net);
-		AddFcon(OutputSize, Parallelism);
+		AddConv(2* NKernels, KernelSize, Stride, Padding);
+		AddActi(Func);
+		AddConv(2* NKernels, KernelSize, Stride, Padding);
+		AddPool(FilterSize, Type, 2*Stride);
+		AddActi(Func);
+
+		AddBlock(Net);
+		AddFcon(OutputSize);
 		AddActi(Func);
 		AddDrop(DropP);
-		AddFcon(OutputSize, Parallelism);
+		AddFcon(OutputSize);
 		AddActi(Func);
 		AddDrop(DropP);
-		AddFcon(OutputSize, Parallelism);
+		AddFcon(OutputSize);
 		AddActi(Func);
 		AddDrop(DropP);
-		AddFcon(10, Parallelism);
+		AddFcon(10);
 		AddActi(Soft);
 	}
 

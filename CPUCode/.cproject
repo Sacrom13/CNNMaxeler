@@ -22,7 +22,7 @@
 							<targetPlatform id="cdt.managedbuild.target.gnu.platform.exe.debug.1716823352" name="Debug Platform" superClass="cdt.managedbuild.target.gnu.platform.exe.debug"/>
 							<builder enabledIncrementalBuild="false" id="cdt.managedbuild.target.gnu.builder.exe.debug.193136832" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.target.gnu.builder.exe.debug">
 								<outputEntries>
-									<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="outputPath" name="/Debug"/>
+									<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="outputPath" name="Debug"/>
 								</outputEntries>
 							</builder>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.1379085653" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
@@ -34,8 +34,8 @@
 								<option defaultValue="gnu.c.optimization.level.none" id="gnu.c.compiler.exe.debug.option.optimization.level.911254565" name="Optimization Level" superClass="gnu.c.compiler.exe.debug.option.optimization.level" valueType="enumerated"/>
 								<option id="gnu.c.compiler.exe.debug.option.debugging.level.491361493" name="Debug Level" superClass="gnu.c.compiler.exe.debug.option.debugging.level" value="gnu.c.debugging.level.max" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.include.paths.1778479499" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${MAXCOMPILERDIR}/include/slic&quot;"/>
-									<listOptionValue builtIn="false" value="../../RunRules/Simulation/include"/>
+									<listOptionValue builtIn="false" value="/opt/maxcompiler/include/slic"/>
+									<listOptionValue builtIn="false" value="/home/specs/Afonso/Project/CNNMaxeler/RunRules/Simulation/include"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.750495383" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -48,13 +48,16 @@
 							<tool id="cdt.managedbuild.tool.gnu.cpp.linker.exe.debug.1717479771" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.exe.debug"/>
 							<tool id="cdt.managedbuild.tool.gnu.assembler.exe.debug.1041393931" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.exe.debug">
 								<option id="gnu.both.asm.option.include.paths.1675755554" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${MAXCOMPILERDIR}/include/slic&quot;"/>
-									<listOptionValue builtIn="false" value="../../RunRules/Simulation/include"/>
+									<listOptionValue builtIn="false" value="/opt/maxcompiler/include/slic"/>
+									<listOptionValue builtIn="false" value="/home/specs/Afonso/Project/CNNMaxeler/RunRules/Simulation/include"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1220496408" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="Includes/CNN/Source/Network/DFE/Backward|Backward|Forward|DFEBlocks" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="scannerConfiguration">
@@ -422,6 +425,11 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="Includes/CNN/Source/Network/DFE/Backward|Includes/CNN/Source/Network/DFE/Forward|Backward|Forward|Includes/CNN/Source/Network/DFE/DFEBlocks|DFEBlocks" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="Forward" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Includes/CNN/Source/Network/DFE/DFEBlocks"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Includes/CNN/Source/Network/DFE/DFEBlocks/Forward"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="scannerConfiguration">
