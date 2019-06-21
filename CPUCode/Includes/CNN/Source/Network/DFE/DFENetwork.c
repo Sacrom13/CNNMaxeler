@@ -163,13 +163,12 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 			Filename - Name of file to write
 			BurstMult - BurstMultiplier for every layer
 			Parallelism - Parallelism for every layer
-			BlockIndex - BlockNumber
 			Flag - forward or backward ( 1 - Forward, 0 - Backward)
 
 			return value - nothing
 		*/
 
-		static void WriteLayers(Block Block, char* Filename, int* BurstMult, int* Parallelism, int BlockIndex, int Flag)
+		static void WriteLayers(Block Block, char* Filename, int* BurstMult, int* Parallelism, int Flag)
 		{
 			FILE *fp;
 
@@ -244,7 +243,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 
 			// --- Write Block Output Dimensions and extra parameters--- //
 
-				fprintf(fp, "0 %d %d %d %d\n", Block.Dims[Block.BlockSize][0], Block.Dims[Block.BlockSize][2], BlockIndex, Flag);
+				fprintf(fp, "0 %d %d %d\n", Block.Dims[Block.BlockSize][0], Block.Dims[Block.BlockSize][2], Flag);
 
 			// --- Close File --- //
 
@@ -724,7 +723,8 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 				WriteDesignParams();
 
 
-				WriteLayers(Net->Blocks[0], "layers.txt", BurstMult[0], ForwParallelism[0], 0, 1);
+				WriteLayers(Net->Blocks[0], "layers0.txt", BurstMult[0], ForwParallelism[0], 1);
+				WriteLayers(Net->Blocks[1], "layers1.txt", BurstMult[1], ForwParallelism[1], 1);
 
 				printf("Blocks Compiled\n");
 
@@ -819,7 +819,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 				printf("Running Call %d/%d.\n", CurrentCall + 1, FParams[Block].NCalls);
 
 				// Running Blocking version.
-				CNNDFE_RunForwardBlock0(
+				Block0_RunForward(
 						FParams[Block].InputOffset,
 						FParams[Block].FirstOutputs[CurrentCall],
 						FParams[Block].MemControl[CurrentCall],
@@ -871,10 +871,6 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 
 	double* CNNForwardDFE(Network Net, double*** Input)
 	{
-
-		// Write Network Design Parameters
-		WriteDesignParams();
-
 		// Setup Input
 
 		int InDims1D = Net.Blocks[0].Dims[0][0] * Net.Blocks[0].Dims[0][1] * Net.Blocks[0].Dims[0][2];
@@ -890,7 +886,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 
 			printf("Writing to DFE\n");
 
-			CNNDFE_MemWrite(InDims1D, 0, Input1D);
+			Block0_MemWrite(InDims1D, 0, Input1D);
 
 		// DFE Computation
 
@@ -932,7 +928,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 			}
 
 			double* Output = Init1D(OutDims1D);
-			CNNDFE_MemRead(OutDims1D,
+			Block0_MemRead(OutDims1D,
 										OutputStart,
 										Output);
 

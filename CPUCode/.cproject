@@ -49,7 +49,7 @@
 							<tool id="cdt.managedbuild.tool.gnu.assembler.exe.debug.1041393931" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.exe.debug">
 								<option id="gnu.both.asm.option.include.paths.1675755554" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="/opt/maxcompiler/include/slic"/>
-									<listOptionValue builtIn="false" value="/home/specs/Afonso/Project/CNNMaxeler/RunRules/Simulation/include"/>
+									<listOptionValue builtIn="false" value="/home/specs/Afonso/Project/CNN/RunRules/Simulation/include"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1220496408" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
@@ -427,8 +427,6 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry excluding="Includes/CNN/Source/Network/DFE/Backward|Includes/CNN/Source/Network/DFE/Forward|Backward|Forward|Includes/CNN/Source/Network/DFE/DFEBlocks|DFEBlocks" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
-						<entry excluding="Forward" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Includes/CNN/Source/Network/DFE/DFEBlocks"/>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Includes/CNN/Source/Network/DFE/DFEBlocks/Forward"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

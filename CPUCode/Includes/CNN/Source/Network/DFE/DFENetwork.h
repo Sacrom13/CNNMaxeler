@@ -10,7 +10,7 @@
 
 	// 2 --- Extra Libs --- //
 
-		#include "DFEBlocks/DFEBlocks.h"
+		#include <Maxfiles.h>
 		#include <MaxSLiCInterface.h>	// Simple Live CPU interface
 
 	// 3 --- Default Parameters --- //

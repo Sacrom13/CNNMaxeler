@@ -1,0 +1,694 @@
+/**
+ * Document: MaxCompiler Tutorial (maxcompiler-tutorial)
+ * Chapter: 3      Example: 1      Name: Moving Average Simple
+ * MaxFile name: MovingAverageSimple
+ * Summary:
+ * 	Manager for the three point moving average kernel design.
+ *  All IO is between the CPU and the DFE.
+*/
+
+package cnn;
+
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelConfiguration;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.Effort;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.OptimizationGoal;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
+
+/*
+                File Structure
+
+    1 - Global Variables
+    	1.1 - Ids
+    		1.1.1 - Layes
+    		1.1.2 - LayerParams
+    			1.1.2.1 - Act Funcs
+    			1.1.2.2 - Pooling
+    			1.1.2.3 - Error Funcs
+    	1.2 - DFE Config
+    		1.2.1 - Manager Design
+    		1.2.2 - Kernel Design
+    	1.3 - Computation
+    	1.4 - Data Types
+    	1.5 - Max Sizes
+    	1.6 - Mem Control
+
+    2 - Constructor
+
+    3 - EngineInterfaces
+    	3.1 - LMem
+    		3.3.1 - Write
+    		3.3.2 - Read
+    	3.2 - Weights
+    	3.3 - Propagation
+    		3.3.1 - Forward
+    		3.3.2 - Backward
+
+    4 - ReadParams
+
+    5 - Main
+
+*/
+
+class CNNManager0 extends CustomManager
+{
+	// 1 --- Global Variables --- //
+
+		// 1.1 --- IDs --- //
+
+			// 1.1.1 --- Layers --- //
+
+				private static final int Conv = 1;
+				private static final int Pool = 2;
+				private static final int Fcon = 3;
+
+			// 1.1.2 --- Layer Params --- //
+
+				// 1.1.2.1 --- Act Funcs --- //
+
+					private static final int ReLu = 1;
+					private static final int Sigmoid = 2;
+					private static final int Tanh = 3;
+					private static final int Soft = 4;
+
+				// 1.1.2.2 --- Pool --- //
+
+					private static final int MaxPool = 1;
+					private static final int MeanPool = 2;
+
+				// 1.1.2.3 --- Error Funcs --- //
+
+					private static final int CrossEnt = 1;
+					private static final int MSE = 2;
+
+		// 1.2 --- Variables for DFE Configuration --- //
+
+			// 1.2.1 --- Manager Design Params --- //
+
+				private static int DesignFreq;				// Design Freq (MHz)
+				private static int LMemFreq;				// LMem Access Freq (MHz)
+
+			// 1.2.2 --- Kernel Design Params --- //
+
+				private static boolean ForwardFlag;
+
+		// 1.3 --- Variables for Computation --- //
+
+			private static int[] Layers;				// Layer Types
+			private static int[][] Dims;				// Layer Dims [0] - Channels , [1] - Size
+			private static double[][] Params;			// Layer Params
+			private static int[] Parallelism;			// Layer Parallelism. 1 means BurstSize outputs are calculated at once. N means N*BurstSize outputs are calculated at once
+
+			private static int[] BurstMult;				// DFE Burst Multiplier
+
+			private static int WeightDims;				// Size Weight array will have
+
+			private static int[] Padding;				// Amount of LMEM Padding input of each Layer has
+
+		// 1.4 --- Data Types --- //
+
+			private static final CPUTypes DataType = CPUTypes.DOUBLE;
+
+		// 1.5 --- Max Sizes --- //
+
+			private static final int MaxBlockSize = 20;		// Max Amount of Layers in a Block
+			private static final int MaxParams = 5;			// Max Params a Layer can Have
+
+			private static final int MaxFwdInStreams = 4;	// Max FwdProp Input Streams
+			private static final int MaxFwdOutStreams = 3;	// Max FwdProp Output Streams
+
+		// 1.6 --- Mem Control --- //
+
+			private static final int BurstSizeBytes = 192;												// Burst Size in Bytes, implicit for Galava DFE
+			private static final int BurstSizeDataType = BurstSizeBytes/DataType.sizeInBytes(); 		// Burst Size in Doubles
+
+
+	// 2 --- Manager Constructor --- //
+
+		public CNNManager0(EngineParameters engineParams)
+		{
+			super(engineParams);
+
+			// Manager Configs
+
+				// Set Pipelining
+				KernelConfiguration KConf = getCurrentKernelConfig();
+				KConf.optimization.setCEPipelining(2);
+
+				// set LMem Frequency
+				/*LMemConfig LMemConf = makeLMemConfig();
+				LMemConf.setArbitrationMode(ArbitrationMode.DYNAMIC);
+				LMemInterface LMem = addLMemInterface(LMemConf);*/
+				LMemInterface LMem = addLMemInterface();
+
+				// Build Configuration
+				BuildConfig BConf = getBuildConfig();
+
+					// Building Speed
+					BConf.setBuildEffort(Effort.HIGH);
+					BConf.setMPPRCostTableSearchRange(1, 4);
+					BConf.setMPPRParallelism(64);
+
+					// Build Objectives
+					BConf.setOptimizationGoal(OptimizationGoal.SPEED);
+
+
+			// Data Streams for Write and Read
+
+				// Streams from CPU to LMem and from LMem to CPU, to Write to LMem or Read from LMem
+				DFELink cpu2lmem = LMem.addStreamToLMem("DataInWrite", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+				DFELink lmem2cpu = LMem.addStreamFromLMem("DataOutRead", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+				DFELink fromcpu = addStreamFromCPU("DataIn");
+				DFELink tocpu = addStreamToCPU("DataOut");
+				cpu2lmem <== fromcpu;
+				tocpu <== lmem2cpu;
+
+				// Setup Kernel
+				KernelBlock K = addKernel(new ForwardPropKernel(makeKernelParameters("Kernel"),
+											Layers,
+											Dims, Params, Parallelism, Padding,
+											WeightDims,
+											BurstMult));
+
+				// set stream clock frequency
+
+				K.setClock(generateStreamClock("Clk", 140));
+
+				// Linking Kernel Inputs and Outputs to LMem
+
+					// Linking Cycle
+					for(int Layer = 0; Layer < Layers.length; ++Layer)
+					{
+						// Connect Input
+
+							DFELink Input = LMem.addStreamFromLMem("Input" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+							K.getInput("Input" + Layer) <== Input;
+
+						// Connect Output
+
+							DFELink Output = LMem.addStreamToLMem("Output" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+							Output <== K.getOutput("Output" + Layer);
+
+						// Connect Extra Streams if necessary
+
+							if(Layers[Layer] == Pool)
+							{
+								Output = LMem.addStreamToLMem("Mask" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+								Output <== K.getOutput("Mask" + Layer);
+							}
+
+							if(Layers[Layer] == Fcon)
+							{
+								Input = LMem.addStreamFromLMem("PrevOutput" + Layer, LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+								K.getInput("PrevOutput" + Layer) <== Input;
+							}
+				}
+		}
+
+	// 3 --- Engine Interfaces ---  //
+
+		// 3.1 --- LMem --- //
+
+			// 3.1.1 --- Write --- //
+
+				private static EngineInterface InterfaceWrite()
+				{
+					EngineInterface Ei = new EngineInterface("MemWrite");
+
+					// Params
+					InterfaceParam Size  = Ei.addParam("Size", CPUTypes.INT32);			// Mem Size ( must be Padded Already)
+					InterfaceParam Start = Ei.addParam("Start", CPUTypes.INT32);		// Where to start Writing
+
+					// Set Streams
+					Ei.setStream("DataIn", DataType, Size * DataType.sizeInBytes());										// Data to be Written
+					Ei.setLMemLinear("DataInWrite", Start * DataType.sizeInBytes(), Size * DataType.sizeInBytes());			// Write Data
+
+					// This shouldn't have to be here, but ignoreAll isn't working properly
+					for(int i = 0; i < WeightDims; ++i)
+					{
+						Ei.setMem("Kernel", "Weights", i, (double) 0);
+					}
+
+					// Ignore Everything that's not used in this Interface
+					Ei.ignoreAll(Direction.IN_OUT);
+
+					return Ei;
+				}
+
+			// 3.1.2 --- Read --- //
+
+				private static EngineInterface InterfaceRead()
+				{
+					EngineInterface Ei = new EngineInterface("MemRead");
+
+					// Params
+					InterfaceParam Size  = Ei.addParam("Size", CPUTypes.INT32);				// Mem Size ( must be Padded Already)
+					InterfaceParam Start = Ei.addParam("Start", CPUTypes.INT32);			// Where to start Reading
+
+					// Set Streams
+					Ei.setStream("DataOut", DataType, Size * DataType.sizeInBytes());									// Data to be Read
+					Ei.setLMemLinear("DataOutRead", Start * DataType.sizeInBytes(), Size * DataType.sizeInBytes());		// Read Data
+
+					// This shouldn't have to be here, but ignoreAll isn't working properly
+					for(int i = 0; i < WeightDims; ++i)
+					{
+						Ei.setMem("Kernel", "Weights", i, (double) 0);
+					}
+
+					// Ignore Everything that's not used in this Interface
+					Ei.ignoreAll(Direction.IN_OUT);
+					return Ei;
+				}
+
+	// 3.3 --- Propagation --- //
+
+		// 3.3.1 --- Forward --- //
+
+			private static EngineInterface RunForward()
+			{
+				EngineInterface Ei = new EngineInterface("RunForward");
+
+				// Amount of Ticks Kernel will run for
+				Ei.setTicks("Kernel", Integer.MAX_VALUE);
+
+				// --------------------------------------------- //
+				// ---------- 		Get Params 		   ----------//
+				// --------------------------------------------- //
+
+					// FMem with Weights
+					InterfaceParamArray Weights = Ei.addParamArray("Weights", CPUTypes.DOUBLE);
+					Ei.setMem("Kernel", "Weights", 0, WeightDims, Weights);
+
+					// First Output Points
+					InterfaceParamArray FirstOutputs = Ei.addParamArray("FirstOutputs", CPUTypes.UINT32);
+
+					// Parameter to control where bytes are written in memory
+					InterfaceParamArray MemControl = Ei.addParamArray("MemControl", CPUTypes.UINT32);
+
+					// Offset in LMem of where Input Starts
+					InterfaceParam InputOffset = Ei.addParam("InputOffset", CPUTypes.UINT32);
+
+				// --------------------------------------------- //
+				// ---------- 		LayerSetup 		   ----------//
+				// --------------------------------------------- //
+
+					int MemStart = 0, TotalMemSize;
+					for(int Layer = 0; Layer < Layers.length; ++Layer)
+					{
+						// Setup First Output Points
+
+							Ei.setScalar("Kernel", "FirstOutput" + Layer, FirstOutputs[Layer]);
+
+						// Setup Mem Control
+
+							Ei.setScalar("Kernel", "MemControl" + Layer, MemControl[Layer]);
+
+						// Setup Inputs and Outputs for each Layers
+
+							TotalMemSize = (Dims[Layer][0] * Dims[Layer][1] * Dims[Layer][1]);
+
+							switch(Layers[Layer])
+							{
+								case Conv:
+											TotalMemSize += Padding[Layer];
+											TotalMemSize *= DataType.sizeInBytes();
+
+											// Input
+											Ei.setLMemLinearWrapped("Input" + Layer,
+																	InputOffset + MemStart,
+																	Ei.addConstant(TotalMemSize),
+																	(MemControl[Layer] > 0 ? 1 : 0) * ((2 * TotalMemSize) + (BurstMult[Layer] * BurstSizeBytes)),
+																	Ei.addConstant(0));
+
+											MemStart += TotalMemSize;
+											break;
+
+								case Pool:
+											TotalMemSize += Padding[Layer];
+											TotalMemSize *= DataType.sizeInBytes();
+
+											// Input
+											Ei.setLMemLinearWrapped("Input" + Layer,
+																	InputOffset + MemStart,
+																	Ei.addConstant(TotalMemSize),
+																	(MemControl[Layer] > 0 ? 1 : 0) * (TotalMemSize + (BurstMult[Layer] * BurstSizeBytes)),
+																	Ei.addConstant(0));
+
+											MemStart += TotalMemSize;
+
+											// Mask
+											// !!! Still need to fix !!!
+											Ei.setLMemLinear("Mask" + Layer,
+															InputOffset + MemStart + ( (MemControl[Layer] - 1) * (BurstMult[Layer] * BurstSizeBytes)),
+															(MemControl[Layer] > 0 ? BurstMult[Layer] : 0) * (BurstSizeBytes));
+
+											MemStart += TotalMemSize;
+
+											break;
+								case Fcon:
+											if(Dims[Layer][0] == 1)
+											{
+												TotalMemSize /= Dims[Layer][1];
+											}
+
+											TotalMemSize += Padding[Layer];
+											TotalMemSize *= DataType.sizeInBytes();
+
+											// Input
+											Ei.setLMemLinearWrapped("Input" + Layer,
+																	InputOffset + MemStart + (FirstOutputs[Layer] * (BurstMult[Layer] * BurstSizeBytes)),
+																	Ei.addConstant((BurstMult[Layer] * BurstSizeBytes)),
+																	(MemControl[Layer] > 0 ? 1 : 0) * ((BurstMult[Layer] * BurstSizeBytes) + (BurstMult[Layer] * BurstSizeBytes)),
+																	Ei.addConstant(0));
+
+											MemStart += TotalMemSize;
+
+											// Prev Output
+											Ei.setLMemLinear("PrevOutput" + Layer,
+															InputOffset + MemStart + ( (MemControl[Layer] - 1) * (BurstMult[Layer] * BurstSizeBytes)),
+															(MemControl[Layer] > 0 ? 1 : 0) * (BurstMult[Layer] * BurstSizeBytes));
+											break;
+							}
+
+						// Output
+						Ei.setLMemLinear("Output" + Layer,
+										InputOffset + MemStart + ( (MemControl[Layer] - 1) * (BurstMult[Layer] * BurstSizeBytes)),
+										(MemControl[Layer] > 0 ? 1 : 0) * (BurstMult[Layer] * BurstSizeBytes));
+					}
+
+					// Ignore Every Param not used here
+					Ei.ignoreAll(Direction.IN_OUT);
+
+				return Ei;
+			}
+
+		// 3.3.2 --- Backward --- //
+
+			private static EngineInterface RunBackward()
+			{
+				EngineInterface Ei = new EngineInterface("RunBackward");
+				return Ei;
+
+				/*
+				// Setup Conv Weights
+				InterfaceParamArray ConvWeights = Ei.addParamArray("ConvWeights", CPUTypes.DOUBLE);		// All Weights for all Conv Layers
+				Ei.setMem("Kernel", "ConvWeights", 0, ConvWeightsSize, ConvWeights);					// Setup FMem
+
+				// Setup Fcon Weights
+				InterfaceParamArray FconWeights = Ei.addParamArray("FconWeights", CPUTypes.DOUBLE);		// All weights for all FCon Layers
+				Ei.setMem("Kernel", "FconWeights", 0, FconWeightsSize, FconWeights);					// Setup FMem
+
+				// Enables and Offsets
+				InterfaceParamArray Enables = Ei.addParamArray("Enables", CPUTypes.UINT8);				// Which Layers Compute
+				InterfaceParamArray Offsets = Ei.addParamArray("Offsets", CPUTypes.UINT32);				// Offsets for Where to write DataOut
+
+				// Set Ticks
+				Ei.setTicks("Kernel", TickMax);
+
+				// Ignore All Params not Mentioned
+				Ei.ignoreAll(Direction.IN_OUT);
+
+				return Ei;
+				*/
+			}
+
+	// 4 --- File Readers --- //
+
+		// 4.1 --- Read Block File --- //
+
+			private static void ReadParams(String Filename)
+			{
+				try
+				{
+
+					// Read Layer File
+					BufferedReader br;											// Reader to the File
+					br = new BufferedReader(new FileReader(Filename));		// Open Layer File
+					String Line;												// Read Line
+					String Aux[];												// Split the Line into all the values
+
+					// Auxiliary Variables to read, so we can later
+					// Call .length and get Correct Results with Real Variables
+					int[] LayersAux = new int[MaxBlockSize];
+					int[][] DimsAux = new int[MaxBlockSize][2];
+					float[][] ParamsAux = new float[MaxBlockSize][MaxParams];
+					int[] ParallelismAux = new int[MaxBlockSize];
+					int[] BurstMultAux = new int[MaxBlockSize];
+
+					// Count number of Layers
+					int LayerCount = 0;
+
+				    while ((Line = br.readLine()) != null)
+				    {
+				    	Aux = Line.split(" ");
+				    	LayersAux[LayerCount] = Integer.parseInt(Aux[0]);			// First Value is Layer Type
+				    	ParallelismAux[LayerCount] = Integer.parseInt(Aux[1]);		// Second Value is Parallelism
+				    	BurstMultAux[LayerCount] = Integer.parseInt(Aux[2]);		// Burst Multiplier
+
+				    	int i = 0;
+				    	switch(LayersAux[LayerCount])
+				    	{
+				    		case 0:		// Block Output Dims
+				    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[1]);				// Channels
+				    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[2]);				// X and Y
+
+				    				// Forward or Backward
+				    				if(Integer.parseInt(Aux[3]) == 1)
+				    				{
+				    					ForwardFlag = true;
+				    				}
+				    				else
+				    				{
+				    					ForwardFlag = false;
+				    				}
+
+				    				break;
+
+				    		case Conv:
+				    				// Get Layer Params
+				    				for(i = 0; i < 5; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 3]);
+				    				}
+
+				    				// Input Dims for this Layer
+				    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+3]);
+				    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+4]);
+
+				    				break;
+
+				    		case Pool:
+
+				    				// Get Layer Params
+					    			for(i = 0; i < 4; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 3]);
+				    				}
+					    			// Input Dims for this Layer
+									DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+3]);
+									DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+4]);
+
+			    					break;
+
+				    		case Fcon:
+
+				    				// Get Layer Params
+					    			for(i = 0; i < 1; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 3]);
+				    				}
+
+					    			// Input Dims for this Layer
+					    			DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+3]);
+					    			DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+4]);
+			    					break;
+				    	}
+				    	LayerCount++;		// Count Number of Layers
+
+				    }
+
+				    // Init in Proper Variables, now that we know layercount
+
+						Layers = new int[LayerCount - 1];
+						Dims = new int[LayerCount][2];
+					    Params = new double[LayerCount - 1][MaxParams];
+					    Parallelism = new int[LayerCount - 1];
+					    BurstMult = new int[LayerCount - 1];
+
+						Padding = new int[LayerCount];
+
+					// Setup First Dims
+
+					    Dims[0][0] = DimsAux[0][0];
+					    Dims[0][1] = DimsAux[0][1];
+
+				    // Calculate First Padding
+
+					    int TotalMemSize = (Dims[0][0] * Dims[0][1] * Dims[0][1]);
+				    	if(Dims[0][0] == 1)
+				    	{
+				    		TotalMemSize /= Dims[0][1];
+				    	}
+						if((TotalMemSize % (BurstMultAux[0] * BurstSizeDataType)) != 0)
+						{
+							Padding[0] = (BurstMultAux[0] * BurstSizeDataType) - (TotalMemSize % (BurstMultAux[0] * BurstSizeDataType));
+						}
+						else
+						{
+							Padding[0] = 0;
+						}
+
+					// Setup WeightDimensions
+						WeightDims = 0;
+						boolean FconFlag = false;
+						int WeightDimsMax = 0;
+
+				    // Cycle to Copy Params. layercount - 1 Because of the extra Output Layer (0), that only has Output Dims
+				    for(int i = 0; i < LayerCount - 1; i++)
+				    {
+				    	// Copy Layer Params
+					    	for(int j = 0; j < MaxParams; j++)
+					    	{
+					    		Params[i][j] = ParamsAux[i][j];
+					    	}
+
+				    	// Copy Dims
+					    	Dims[i + 1][0] = DimsAux[i + 1][0];
+					    	Dims[i + 1][1] = DimsAux[i + 1][1];
+
+				    	// Copy Layer Type, Parallelism, BurstMult
+					    	Layers[i] = LayersAux[i];
+					    	Parallelism[i] = ParallelismAux[i];
+					    	BurstMult[i] = BurstMultAux[i];
+
+				    	// Calculate WeightDims
+
+					    	switch(Layers[i])
+					    	{
+					    			case Conv:
+												WeightDims = (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
+							    				break;
+
+					    			case Pool :
+							    				break;
+
+					    			case Fcon:
+
+					    						if(FconFlag == false)
+					    						{
+						    						WeightDims += (int) Math.pow(BurstMult[i] * BurstSizeDataType, 2);
+					    						}
+					    						else
+					    						{
+					    							WeightDims = (int) (2 * Math.pow(BurstMult[i] * BurstSizeDataType, 2));
+					    						}
+							    				break;
+					    	}
+
+							if(WeightDims > WeightDimsMax)
+							{
+								WeightDimsMax = WeightDims;
+							}
+
+				    	// Calculate Padding
+
+					    	TotalMemSize = (Dims[i + 1][0] * Dims[i + 1][1] * Dims[i + 1][1]);
+					    	if(Dims[i + 1][0] == 1)
+					    	{
+					    		TotalMemSize /= Dims[i + 1][1];
+					    	}
+							if((TotalMemSize % (BurstMult[i] * BurstSizeDataType)) != 0)
+							{
+								Padding[i + 1] = ((BurstMult[i] * BurstSizeDataType) - (TotalMemSize % (BurstMult[i] * BurstSizeDataType)));
+							}
+							else
+							{
+								Padding[i + 1] = 0;
+							}
+				    }
+				    WeightDims = WeightDimsMax;
+				}
+				catch (FileNotFoundException e)
+				{
+
+				}
+				catch (IOException e)
+				{
+
+				}
+			}
+
+		// 4.2 --- Read DFEParams File --- //
+
+			private static void ReadDFEParams()
+			{
+				BufferedReader br;
+				try
+				{
+					br = new BufferedReader(new FileReader("params.txt"));
+					String[] Aux = br.readLine().split(" ");
+				    LMemFreq = Integer.parseInt(Aux[0]);
+				    DesignFreq = Integer.parseInt(Aux[1]);
+				}
+				catch (FileNotFoundException e1)
+				{
+
+				}
+				catch (IOException e)
+				{
+
+				}
+
+			}
+
+	// 5 --- Main --- //
+
+		public static void main(String[] args)
+		{
+			ReadDFEParams();
+
+			String Filename = "layers0.txt";
+			ReadParams(Filename);
+
+			EngineParameters params = new EngineParameters(args);
+			CNNManager0 m = new CNNManager0(params);
+
+			// Create Interfaces
+			m.createSlicInterface(InterfaceWrite());				// Write to LMem
+			m.createSlicInterface(InterfaceRead());					// Read to LMem
+
+			if(ForwardFlag)
+			{
+				m.createSlicInterface(RunForward());					// Run ForwardProp
+			}
+			else
+			{
+				m.createSlicInterface(RunBackward()); 					// Run Backprop
+			}
+
+			// Don't need Default
+			m.suppressDefaultSlicInterface();
+
+			// Build Manager.
+			m.build();
+		}
+}
