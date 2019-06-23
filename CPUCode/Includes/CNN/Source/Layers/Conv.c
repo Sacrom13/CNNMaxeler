@@ -102,7 +102,12 @@
                                     Output[kernel][outy][outx] += Convolution(Padded[channel], Filters[kernel][channel], x, y, Params[2]);
                             }
 
-                            // --- Apply Act Func --- //
+                            // --- Apply Act Func and Overflow Control--- //
+
+                            	if(Output[kernel][outy][outx] > MaxValue)
+                            	{
+                            		Output[kernel][outy][outx] = MaxValue;
+                            	}
 
                                 if(Params[0] == ReLu)
                                 {

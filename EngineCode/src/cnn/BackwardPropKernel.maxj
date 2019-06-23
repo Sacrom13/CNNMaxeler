@@ -64,10 +64,10 @@ class BackwardPropKernel extends Kernel
 	// 2 --- Constructor--- //
 
 		BackwardPropKernel(KernelParameters parameters,
-								int[] Layers,
-								int[][] Dims, double[][] Params, int[] Parallelism, int[] Padding,
-								int WeightDims,
-								int BurstMult)
+							int[] Layers,
+							int[][] Dims, double[][] Params,
+							int[] Parallelism, int[] Padding, int[] BurstMult,
+							int WeightDims)
 		{
 			super(parameters);
 
@@ -105,7 +105,7 @@ class BackwardPropKernel extends Kernel
 									ConvBackward(TickCount, Layer,
 												Parallelism[Layer], Params[Layer], Padding[Layer],
 												Dims[Layer], Dims[Layer + 1],
-												BurstMult,
+												BurstMult[Layer],
 												Weights, WeightBits, WeightArrayOffset,
 												MemControl, FirstOutput);
 
@@ -115,7 +115,7 @@ class BackwardPropKernel extends Kernel
 									PoolBackward(TickCount, Layer,
 													Parallelism[Layer], Params[Layer], Padding[Layer],
 													Dims[Layer], Dims[Layer + 1],
-													BurstMult,
+													BurstMult[Layer],
 													MemControl, FirstOutput);
 									break;
 						case Fcon:

@@ -5,6 +5,7 @@
  * Summary:
  * 	Computes a three point moving average over the input stream
  */
+
 package cnn;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
@@ -62,13 +63,18 @@ class ForwardPropKernel extends Kernel
 			private static final int BurstSizeBytes = 192;												// Burst Size in Bytes, implicit for Galava DFE
 			private static final int BurstSizeDataType = BurstSizeBytes/DataType.sizeInBytes();			// Burst Size in Doubles
 
+		// 1.4 --- Overflow Settings --- //
+
+			private static final int MaxValue = 1000;													// Maximum Value, so overflow isn't a problem
+			private static final int MinValue = -1000;													// Minimum Value, for pooling mask management
+
 	// 2 --- Constructor--- //
 
 		ForwardPropKernel(KernelParameters parameters,
 								int[] Layers,
-								int[][] Dims, double[][] Params, int[] Parallelism, int[] Padding,
-								int WeightDims,
-								int[] BurstMult)
+								int[][] Dims, double[][] Params,
+								int[] Parallelism, int[] Padding, int[] BurstMult,
+								int WeightDims)
 		{
 			super(parameters);
 
@@ -169,67 +175,12 @@ class ForwardPropKernel extends Kernel
 						[3] = Stride;
 						[4] = Padding;
 
-						Burst size 3, BurstMult = 1, LayerPara = 2
-
-
-										Input(4x3x3)
-
-								x00 x01 x02		x09 x10 x11
-								x03 x04 x05		x12 x13 x14
-								x06 x07 x08		x15 x16 x17
-
-								x18 x19 x20		x27 x28 x29
-								x21 x22 x23		x30 x31 x32
-								x24 x25 x26		x33 x34 x35
-
-
-									4 Kernels(4x2x2)
-
-
-								k00 k01		k04 k05						k16	k17		k20	k21
-								k02 k03		k06	k07						k18	k19		k22	k23
-					Kernel 1								Kernel 2
-								k08	k09		k12	k13						k24	k25		k28	k29
-								k10	k11		k14	k15						k26	k27		k30	k31
-
-
-
-								k32 k33		k36 k37						k48	k49		k52	k53
-								k34 k35		k38	k39						k50	k51		k54	k55
-					Kernel 3								Kernel 4
-								k40	k41		k44	k45						k56	k57		k60	k61
-								k42	k43		k46	k47						k58	k59		k62	k63
-
-
-
-					n				When to Output											First Output Point
-
-
-					0			output on x09, x10 and x12.  									( 0 )
-					1			output on tick x13, x(9 + 36) and x(10 + 36).  					( 3 )
-					2			output on tick x12, x13, x(9 + 36).								( 2 )
-					3			output on tick x10, x12, x13.									( 1 )
-					4			output on tick x09, x10, x12									( 0 )
-					5			output on tick x13, x14(pad), x15(pad)							( 3 )
-
-
-						Only Output if:
-										BurstSize * BurstMult * CurrentCall < NOutputPoints < BurstSize * BurstMult * (CurrentCall + 1)
-										CTicks = InDims[0] / Parallelism			( Has to be Integer )
-										YTicks <= OutDims[1
-						 				XTicks <= OutDims[1]
-
-						LMem Syncing takes precendence over Ticks.
-						Need go make Ticks go through entire image and can't use controlled inputs in order for Stream.offset() to work properly
-
-						Calculate the First Output Point, given by the following Formula (FirstOutputPoint[0] = 0):
-						FirstOutputPoint[n] = (FirstOutputPoint[n - 1] + (BurstSize * BurstMult)) % (OutDims[1] * OutDims[1])
-
 					*/
 
 					// Helper Variables to avoid doing same computation more than once
 					int PaddedInDims = (int) (InDims[1] + 2*Params[4]);
 					int DFEStride = Params[3] > 1 ? (int) Params[3] : 2;
+					int OutputSize = BurstMult*BurstSizeDataType;
 
 					// --------------------------------------------- //
 					// ----------  Input Position Counters	---------//
@@ -291,21 +242,20 @@ class ForwardPropKernel extends Kernel
 										    YTicks < PaddedInDims - Params[2] + 1 &		// If we are in correct Y position to Output
 											XTicks < PaddedInDims - Params[2] + 1 );	// If we are in correct X position to Output
 
-					// Padding
-					DFEVar PadEnable = (Enable.eq(Math.ceil(OutDims[0] * OutDims[1] * OutDims[1]/ (float)(BurstMult*BurstSizeDataType))) & (TickCount > Padding + 2 * InDims[0] * PaddedInDims * PaddedInDims));
-					IsOutputPoint |= PadEnable;
-
 					// Output Points														2x Output size because of transitions
-					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(2 * OutDims[1] * OutDims[1] + (BurstSizeDataType * BurstMult)))
-					.withMax(3 * OutDims[1] * OutDims[1] + (BurstSizeDataType * BurstMult) - 1)
+					Count.Params OutPointParams = control.count.makeParams(MathUtils.bitsToAddress(2 * OutDims[1] * OutDims[1] + (OutputSize)))
+					.withMax(2 * OutDims[1] * OutDims[1] + (OutputSize) - 1)
 					.withWrapMode(WrapMode.STOP_AT_MAX)
 					.withInitValue(1)
 					.withEnable((Enable > 0) & (IsOutputPoint));
 					Counter OutPointCounter = control.count.makeCounter(OutPointParams);
 					DFEVar OutPointTicks = OutPointCounter.getCount().cast(dfeUInt(32));
 
-					DFEVar DataOutEnable =  (Enable > 0) &																											// If Layer is Active
-											( (IsOutputPoint) & (OutPointTicks > FirstOutput) & (OutPointTicks < FirstOutput + 2 + (BurstSizeDataType*BurstMult)));	// Regular Output Point
+					DFEVar DataOutEnable =  (Enable > 0) &																										// If Layer is Active
+											( (IsOutputPoint) & (OutPointTicks > FirstOutput) & (OutPointTicks < FirstOutput + 2 + OutputSize)); 				// Regular Output Point
+
+					// Padding Output Point, optimizes ticks???
+					//DataOutEnable |= ((Enable.eq(Math.ceil(OutDims[0] * OutDims[1] * OutDims[1]/ (float)(OutputSize)))) & (OutPointTicks > OutputSize - Enable*OutputSize + OutDims[1]*OutDims[1]));
 
 
 					// --------------------------------------------- //
@@ -371,6 +321,8 @@ class ForwardPropKernel extends Kernel
 					// ---------- 			Output		   ----------//
 					// --------------------------------------------- //
 
+					Output = Output > MaxValue ? MaxValue : Output;
+
 					// Activation Function
 					switch((int) Params[0])
 					{
@@ -383,13 +335,10 @@ class ForwardPropKernel extends Kernel
 									break;
 						case Tanh:
 									// No Direct function for tanh
-									DFEVar aux = KernelMath.exp(2 * Output);
-									Output = DataOutEnable ? (aux - 1) / (aux + 1) : Output;
+									DFEVar aux = 0.5 - (1/(1 + KernelMath.exp(2 * Output)));
+									Output = DataOutEnable ? (Output > 8 ? 1 : 2*aux): Output;
 									break;
 					}
-
-					// Output 0 if Padding
-					Output = PadEnable ? 0 : Output;
 
 					// Write Result to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
@@ -508,6 +457,10 @@ class ForwardPropKernel extends Kernel
 								// Read input data from LMem
 								DFEVar Data = stream.offset(Input, DataOffset).cast(ComputationDataType);
 
+								// Check if within bounds
+								Data = (XTicks + x) >= InDims[1] ? MinValue : Data;
+								Data = (YTicks + y) >= InDims[1] ? MinValue : Data;
+
 							// Find Max
 
 								Output = Output > Data ? Output : Data;
@@ -535,8 +488,7 @@ class ForwardPropKernel extends Kernel
 									break;
 					}
 
-					// Output 0 if Padding
-					Output = PadEnable ? 0 : Output;
+					//debug.simPrintf(Enable > 0, "Tick %d\n\tC, Y, X = %d, %d, %d\n\tOutPointTicks = %d, DataOutEnable = %d\n", TickCount, CTicks, YTicks, XTicks, OutPointTicks, DataOutEnable);
 
 					// Output to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
@@ -549,7 +501,8 @@ class ForwardPropKernel extends Kernel
 
 					DFEVar MaskOutput = WindowOutput.eq(Output) ? constant.var(1).cast(IODataType) : constant.var(0);
 
-					io.output("Mask" + Layer, MaskOutput.cast(IODataType), IODataType, (TickCount >= ((Enable - 1) * (BurstMult * BurstSizeDataType)) & (TickCount < (Enable) * BurstMult * BurstSizeDataType)));
+
+					io.output("Mask" + Layer, MaskOutput.cast(IODataType), IODataType, Enable.eq(Math.ceil(OutDims[0] * OutDims[1] * OutDims[1]/ (float)(BurstMult*BurstSizeDataType))) & TickCount < BurstMult*BurstSizeDataType);
 				}
 
 				private void MeanPoolForward(DFEVar TickCount, int Layer,
@@ -678,8 +631,8 @@ class ForwardPropKernel extends Kernel
 									break;
 						case Tanh:
 									// No Direct function for tanh
-									DFEVar aux = KernelMath.exp(2 * Output);
-									Output = DataOutEnable ? (aux - 1) / (aux + 1) : Output;
+									DFEVar aux = 0.5 - (1/(1 + KernelMath.exp(2 * Output)));
+									Output = DataOutEnable ? (Output > 8 ? 1 : 2*aux): Output;
 									break;
 					}
 
@@ -716,6 +669,8 @@ class ForwardPropKernel extends Kernel
 					 [0] = ActFunc
 					 [1] = DropP
 					 */
+
+					debug.simPrintf(Enable.eq(1), "TickCount = %d\n", TickCount);
 
 					// --------------------------------------------- //
 					// ---------- 			Counters 		---------//
@@ -803,12 +758,14 @@ class ForwardPropKernel extends Kernel
 					// ---------- 		Output		       ----------//
 					// --------------------------------------------- //
 
+					// Activation function and overflow control
 					int FirstOutputMax = InDims[0] > 1 ? InDims[0] * InDims[1] * InDims[1] : InDims[1];
 					FirstOutputMax = (int) (Math.floor((FirstOutputMax + InputPadding) / (float)(BurstMult*BurstSizeDataType)) - 1);
 
 					DFEVar ActEnable = DataOutEnable & FirstOutput.eq(FirstOutputMax);
 
-					// Activation function
+					Output = (ActEnable & Output > MaxValue) ? MaxValue : Output;
+
 					switch((int) Params[0])
 					{
 						case ReLu:
@@ -820,18 +777,12 @@ class ForwardPropKernel extends Kernel
 									break;
 						case Tanh:
 									// No Direct function for tanh
-									DFEVar aux = KernelMath.exp(2 * Output);
-									Output = ActEnable ? (aux - 1) / (aux + 1) : Output;
+									DFEVar aux = 0.5 - (1/(1 + KernelMath.exp(2 * Output)));
+									Output = ActEnable ? (Output > 8 ? 1 : 2*aux): Output;
 									break;
 					}
 
 					// Output to Mem
 					io.output("Output" + Layer, Output.cast(IODataType), IODataType, DataOutEnable);
-				}
-
-			// 3.2.2 --- Backward --- //
-
-				private void FconBackward()
-				{
 				}
 }

@@ -53,8 +53,6 @@
                                     MaxY = y;
                                     MaxX = x;
                                 }
-                                // Reset Mask
-                                Mask[y][x] = 0;
                             }
                         }
                         // Set 1 in Position where the Max Value was found
@@ -73,9 +71,6 @@
                             for(int x = StartX; x < StartX + WindowSize; ++x)
                             {
                                 out += Input[y][x];
-
-                                // Reset Mask
-                                Mask[y][x] = 0;
                             }
                         }
 
@@ -87,7 +82,7 @@
                         {
                             for(int x = StartX; x < StartX + WindowSize; ++x)
                             {
-                                Mask[y][x] = out;
+                                Mask[y][x] += out;
                             }
                         }
 
@@ -274,6 +269,7 @@
                                     int outx = (int)(x * Params[1]) + MaskX;
 
                                     Output[channel][outy][outx] = Mask[channel][outy][outx] * Delta[channel][y][x];
+                                    Mask[channel][outy][outx] = 0;
                                 }
                             }
                         }

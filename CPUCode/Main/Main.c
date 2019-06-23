@@ -21,13 +21,19 @@ void CreateTestNetwork(Network* Net, int* InDims)
 	InitCNN(Net, InDims);
 
 	AddBlock(Net);
-	AddConv(16, 3, 2, 2);
-	AddActi(ReLu);
 	AddConv(16, 3, 1, 0);
 	AddActi(ReLu);
+	AddConv(16, 3, 1, 0);
+	AddActi(Sigmoid);
 	AddPool(2, MaxPool, 2);
-	AddFcon(200);
+
+	AddBlock(Net);
+	AddFcon(100);
 	AddActi(ReLu);
+	AddFcon(100);
+	AddActi(Sigmoid);
+	AddFcon(100);
+	AddActi(Tanh);
 
 	/*InitCNN(Net, InDims);
 
@@ -52,7 +58,7 @@ int main()
 	Network* Net = malloc(sizeof(Network));
 
 	printf("Setting Network\n");
-	int InDims[3] = {3, 29, 29};
+	int InDims[3] = {3, 30, 30};
 
 	CreateTestNetwork(Net, InDims);
 
@@ -71,6 +77,13 @@ int main()
 			BackParallelism[i][j] = 1;
 		}
 	}
+	BurstMult[0][0] = 29;
+	BurstMult[0][1] = 25;
+	BurstMult[0][2] = 113;
+
+	BurstMult[1][0] = 1;
+	BurstMult[1][1] = 1;
+	BurstMult[1][2] = 1;
 
 	DFECompile(Net, BurstMult, ForwParallelism, BackParallelism);
 

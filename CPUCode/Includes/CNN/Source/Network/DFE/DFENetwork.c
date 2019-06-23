@@ -318,7 +318,6 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 
 	// 4.1 --- Setup Parameters --- //
 
-
 		static void SetupForwParams(Network* Net, int Block, int* BurstMult)
 		{
 			// NCalls
@@ -361,7 +360,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 									}
 									else
 									{
-										LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 2 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)(BurstMult[Layer] * BurstSizeDataType)));
+										LayerCalls[Layer][0] = LayerCalls[Layer - 1][1] + 1 - ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)(BurstMult[Layer] * BurstSizeDataType)));
 										LayerCalls[Layer][1] = LayerCalls[Layer][0] + ((int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2] / (float)(BurstMult[Layer] * BurstSizeDataType)));
 									}
 
@@ -374,15 +373,15 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 									}
 									else
 									{
-										//LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
-										if(Net->Blocks[Block].Layers[Layer - 1] == Fcon)
+										LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
+										/*if(Net->Blocks[Block].Layers[Layer - 1] == Fcon)
 										{
 											LayerCalls[Layer][0] = LayerCalls[Layer - 1][1];
 										}
 										else
 										{
 											LayerCalls[Layer][0] = LayerCalls[Layer - 1][0] + 1;
-										}
+										}*/
 									}
 									LayerCalls[Layer][1] = LayerCalls[Layer][0] + (int)(ceil(Net->Blocks[Block].Dims[Layer][0] * Net->Blocks[Block].Dims[Layer][1] * Net->Blocks[Block].Dims[Layer][2] / (float) (BurstMult[Layer] * BurstSizeDataType)) * ceil(Net->Blocks[Block].Dims[Layer + 1][2] / (float)(BurstMult[Layer] * BurstSizeDataType)));
 									break;
@@ -452,18 +451,15 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 					exit(MemoryError);
 				}
 
-				int CurrentKernel;
 				int OutputSize;
 
 				for(int Layer = 0; Layer < Net->Blocks[Block].BlockSize; ++Layer)
 				{
+					OutputSize = BurstMult[Layer] * BurstSizeDataType;
+					int CurrentKernel = 0;
 					switch(Net->Blocks[Block].Layers[Layer])
 					{
 						case Conv:
-									// Setup Variables for this Kernel
-									CurrentKernel = 0;
-
-									OutputSize = BurstMult[Layer] * BurstSizeDataType;
 
 									for(int CurrentCall = LayerCalls[Layer][0]; CurrentCall < LayerCalls[Layer][1]; ++CurrentCall)
 									{
@@ -492,7 +488,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 												{
 													for(int x = 0; x < Net->Blocks[Block].LayerParams[Layer][2]; ++x)
 													{
-														if(CurrentKernel + Kernel != Net->Blocks[Block].Dims[Layer + 1][0])
+														if((CurrentKernel + Kernel) < Net->Blocks[Block].Dims[Layer + 1][0])
 														{
 															FParams[Block].DFEWeights[CurrentCall][pos[CurrentCall]] = Net->Blocks[Block].Weights[Layer][CurrentKernel + Kernel][Channel][y][x];
 														}
@@ -505,6 +501,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 												}
 											}
 										}
+
 										if((int)FParams[Block].FirstOutputs[CurrentCall][Layer] + OutputSize > Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
 										{
 											CurrentKernel++;
@@ -652,11 +649,11 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 							case Conv:
 										// Check if Output Size does not exceed 2 channels at once
 
-											if(BurstMult[Block][Layer] * BurstSizeDataType >= 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
+											if(BurstMult[Block][Layer] * BurstSizeDataType >= 2 + Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2])
 											{
 												printf("Cannot compile to DFE.\n");
 												printf("Layer %d in Block %d has Output Dims %dx%d\n", Layer + 1, Block + 1, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][2]);
-												printf("BurstMult*BurstSize = %dx%d = %d, which has to be less than 2*%d*%d = %d\n", BurstMult[Block][Layer], BurstSizeDataType, BurstMult[Block][Layer] * BurstSizeDataType, Net->Blocks[Block].Dims[Layer + 1][1], Net->Blocks[Block].Dims[Layer + 1][2], 2 * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2]);
+												printf("BurstMult*BurstSize = %dx%d = %d, which has to be less than (2 + OutputDims) = %d\n", BurstMult[Block][Layer], BurstSizeDataType, BurstMult[Block][Layer] * BurstSizeDataType, 2 + Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2]);
 												exit(DesignError);
 											}
 
@@ -690,6 +687,18 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 											}
 
 										break;
+
+							case Pool:
+										// Check if BurstMult is not higher than entire Dimensions
+
+											if(BurstMult[Block][Layer] > ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2]/(float)BurstSizeDataType))
+											{
+												printf("Cannot compile to DFE.\n");
+												printf("Layer %d in Block %d has invalid forward BurstMultiplier\n", Net->Blocks[Block].Layers[Layer] + 1, Block + 1);
+												printf("BurstMult (%d) cannot be greater than ceil(InDims*BurstSizeDataType) = %d\n", BurstMult[Block][Layer], (int)ceil(Net->Blocks[Block].Dims[Layer + 1][0] * Net->Blocks[Block].Dims[Layer + 1][1] * Net->Blocks[Block].Dims[Layer + 1][2]/(float)BurstSizeDataType));
+												exit(DesignError);
+											}
+											break;
 							case Fcon:
 										// Check if Weights fit in FMem
 
@@ -718,15 +727,11 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 
 			// --- Compile Blocks --- //
 
-				printf("Compiling Blocks\n");
-
 				WriteDesignParams();
-
 
 				WriteLayers(Net->Blocks[0], "layers0.txt", BurstMult[0], ForwParallelism[0], 1);
 				WriteLayers(Net->Blocks[1], "layers1.txt", BurstMult[1], ForwParallelism[1], 1);
 
-				printf("Blocks Compiled\n");
 
 			// --- Setup Parameters --- //
 
@@ -800,7 +805,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 						SetupForwParams(Net, Block, BurstMult[Block]);
 					}
 
-			printf("Network sucessfully compiled!");
+			printf("Network sucessfully compiled!\n");
 		}
 
 	static void BlockForwardDFE(int Block)
@@ -813,60 +818,37 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 			// ---------- 		Computation    	   ----------//
 			// --------------------------------------------- //
 
+		/*
+		 *  max file t ∗ mavMaxFile = MovingAverage init();
+			max engine t ∗ mavDFE = max load(mavMaxFile, ”local: ∗ ”);
+		 */
+
 
 			for(int CurrentCall = 0; CurrentCall < (int)FParams[Block].NCalls; ++CurrentCall)
 			{
 				printf("Running Call %d/%d.\n", CurrentCall + 1, FParams[Block].NCalls);
 
 				// Running Blocking version.
-				Block0_RunForward(
-						FParams[Block].InputOffset,
-						FParams[Block].FirstOutputs[CurrentCall],
-						FParams[Block].MemControl[CurrentCall],
-						FParams[Block].DFEWeights[CurrentCall]);
+				if(Block == 0)
+				{
+					Block0_RunForward(
+								FParams[Block].InputOffset,
+								FParams[Block].FirstOutputs[CurrentCall],
+								FParams[Block].MemControl[CurrentCall],
+								FParams[Block].DFEWeights[CurrentCall]);
 
-				// To run NonBlock version
-					//max_nowait(MovingAverageSimple_RunForward_nonblock(
-					//	FParams[Block].InputOffset,
-					//	FParams[Block].FirstOutputs[CurrentCall],
-					//	FParams[Block].MemControl[CurrentCall],
-					//	FParams[Block].DFEWeights[CurrentCall]));
-
-				//	Note: max_nowait can be replaced with max_wait() for control.
-				
+					/*max_file_t* File = Block0_init();
+					max_engine_t* DFE = max_load(File, "*");*/
+				}
+				if(Block == 1)
+				{
+					Block1_RunForward(
+								FParams[Block].InputOffset,
+								FParams[Block].FirstOutputs[CurrentCall],
+								FParams[Block].MemControl[CurrentCall],
+								FParams[Block].DFEWeights[CurrentCall]);
+				}
 			}
-			printf("\n");
-
-		// --------------------------------------------- //
-		// ----------     Advanced Static      ----------//
-		// --------------------------------------------- //
-
-		// Not working. Problem with max_load
-		/*
-			// Init Max File
-			printf("Loading Max File!\n");
-			max_file_t *File = MovingAverageSimple_init();
-			max_engine_t *Engine = max_load(File, '*');
-			printf("Max File Loaded!\n");
-
-			// --------------------------------------------- //
-			// ---------- 		Computation    	   ----------//
-			// --------------------------------------------- //
-
-
-			for(int CurrentCall = 0; CurrentCall < (int)Block.FParams.NCalls; ++CurrentCall)
-			{
-				MovingAverageSimple_RunForward_actions_t Actions;
-				Actions.param_FirstOutputs = FParams[Block].FirstOutputs[CurrentCall];
-				Actions.param_InputOffset = FParams[Block].InputOffset;
-				Actions.param_MemControl = FParams[Block].MemControl[CurrentCall];
-				Actions.param_Weights = FParams[Block].DFEWeights[CurrentCall];
-
-
-				printf("Running Call %d/%d.\n", CurrentCall + 1, FParams.NCalls);
-				MovingAverageSimple_RunForward_run(Engine, &Actions);
-			}
-			printf("\n");*/
 	}
 
 	double* CNNForwardDFE(Network Net, double*** Input)
@@ -893,7 +875,7 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 			printf("Running DFE\n");
 
 			StartTiming();
-			for(int Block = 0; Block < 1; ++Block)
+			for(int Block = 0; Block < 2; ++Block)
 			{
 				BlockForwardDFE(Block);
 			}
@@ -903,36 +885,34 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 
 			printf("Reading from DFE\n");
 
-			int OutputStart = 0;
-			for(int i = 0; i < Net.Blocks[0].BlockSize; ++i)
+			int OutputStart = FParams[1].InputOffset;
+			for(int i = 0; i < Net.Blocks[1].BlockSize; ++i)
 			{
-				int DimAux = Net.Blocks[0].Dims[i][0] * Net.Blocks[0].Dims[i][1] * Net.Blocks[0].Dims[i][2];
-				if((DimAux % (FParams[0].BurstMult[i] * BurstSizeDataType)) != 0)
+				int DimAux = Net.Blocks[1].Dims[i][0] * Net.Blocks[1].Dims[i][1] * Net.Blocks[1].Dims[i][2];
+				if((DimAux % (FParams[1].BurstMult[i] * BurstSizeDataType)) != 0)
 				{
-					DimAux += ((FParams[0].BurstMult[i] * BurstSizeDataType) - (DimAux % (FParams[0].BurstMult[i] * BurstSizeDataType)));
+					DimAux += ((FParams[1].BurstMult[i] * BurstSizeDataType) - (DimAux % (FParams[1].BurstMult[i] * BurstSizeDataType)));
 				}
 
 				OutputStart += DimAux;
 
-				if(Net.Blocks[0].Layers[i] == Pool)
+				if(Net.Blocks[1].Layers[i] == Pool)
 				{
 					OutputStart += DimAux;
 				}
 			}
 
 			int OutDims1D;
-			OutDims1D = Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][0] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][1] * Net.Blocks[0].Dims[Net.Blocks[0].BlockSize][2];
-			if(OutDims1D % (FParams[0].BurstMult[Net.Blocks[0].BlockSize - 1] * BurstSizeDataType) != 0)
+			OutDims1D = Net.Blocks[1].Dims[Net.Blocks[1].BlockSize][0] * Net.Blocks[1].Dims[Net.Blocks[1].BlockSize][1] * Net.Blocks[1].Dims[Net.Blocks[1].BlockSize][2];
+			if(OutDims1D % (FParams[1].BurstMult[Net.Blocks[1].BlockSize - 1] * BurstSizeDataType) != 0)
 			{
-				OutDims1D += ((FParams[0].BurstMult[Net.Blocks[0].BlockSize - 1] * BurstSizeDataType) - (OutDims1D % (FParams[0].BurstMult[Net.Blocks[0].BlockSize - 1] * BurstSizeDataType)));
+				OutDims1D += ((FParams[1].BurstMult[Net.Blocks[1].BlockSize - 1] * BurstSizeDataType) - (OutDims1D % (FParams[1].BurstMult[Net.Blocks[1].BlockSize - 1] * BurstSizeDataType)));
 			}
 
 			double* Output = Init1D(OutDims1D);
-			Block0_MemRead(OutDims1D,
-										OutputStart,
-										Output);
+			Block0_MemRead(OutDims1D, OutputStart, Output);
 
-			// Print1DMatrix(Output, OutDims1D);
+			Print1DMatrix(Output, OutDims1D);
 
 		// Run CPU
 
@@ -941,19 +921,20 @@ static double*** BlockForwardCpu(Block Block, double*** Input, char* Flag1D)
 
 			printf("Running CPU!\n");
 			StartTiming();
-			double*** TestOutput = BlockForwardCpu(Net.Blocks[0], Input, aux);
-			printf("CPU Finished. Time Taken = %.2f milliseconds\n", StopTiming()/1000);
+			double*** TestOutput = BlockForwardCpu(Net.Blocks[1], BlockForwardCpu(Net.Blocks[0], Input, aux), aux);
 
-		// Check if Correct
+			printf("CPU Finished. Time Taken = %.2f milliseconds\n", StopTiming()/1000);
 
 			double* TestOutput1D = Init1D(OutDims1D);
 
-			ConvertTo1D(TestOutput, TestOutput1D, Net.Blocks[0].Dims[Net.Blocks[0].BlockSize]);
+			ConvertTo1D(TestOutput, TestOutput1D, Net.Blocks[1].Dims[Net.Blocks[1].BlockSize]);
 
-			// Print1DMatrix(TestOutput1D, OutDims1D);
+			Print1DMatrix(TestOutput1D, OutDims1D);
+
+		// Check if Correct
 
 			double Margin = .5e-2;
-			Compare1D(Output, TestOutput1D, OutDims1D, Margin);
+			Compare1D(Output, TestOutput1D, Net.Blocks[1].Dims[Net.Blocks[1].BlockSize][0] * Net.Blocks[1].Dims[Net.Blocks[1].BlockSize][1] * Net.Blocks[1].Dims[Net.Blocks[1].BlockSize][2], Margin);
 
 		return NULL;
 	}

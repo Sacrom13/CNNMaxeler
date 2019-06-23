@@ -37,10 +37,6 @@
 						 char DropControl)						// Control Dropout
 		{
 
-			// Max in case Softmax
-			double Max = -FLT_MAX;
-
-
 			for(int y = 0; y < OutDim; ++y)
 			{
 				// If Output is meant to be Dropped out, don't calculate it
@@ -57,8 +53,12 @@
 						Output[y] += Input[x] * Weights[x][y];
 					}
 
-				// --- Apply Act Func --- //
+				// --- Apply Act Func and overflow control --- //
 
+					if(Output[y] > MaxValue)
+					{
+						Output[y] = MaxValue;
+					}
 			        if(Params[0] == ReLu)
 			        {
 			            Output[y] = Output[y] > 0 ? Output[y] : 0;
@@ -71,16 +71,9 @@
 			        {
 			            Output[y] = tanh(Output[y]);
 			        }
-			        if(Params[0] == Soft)
-			        {
-			        	if(Output[y] > Max)
-			        	{
-			        		Max = Output[y];
-			        	}
-			        }
 			}
 
-			// Finish Soft Layer Computations
+			// Soft Layer Computations
 			if(Params[0] == Soft)
 			{
 				double Sum = 0;
@@ -88,7 +81,7 @@
 				// Find Sum
 				for(int y = 0; y < OutDim; ++y)
 				{
-					Output[y] = exp(Output[y] - Max);
+					Output[y] = exp(Output[y]);
 					Sum += Output[y];
 				}
 				for(int y = 0; y < OutDim; ++y)

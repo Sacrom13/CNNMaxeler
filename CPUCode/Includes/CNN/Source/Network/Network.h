@@ -76,6 +76,8 @@
 			void SetLMemFreq(int Freq);
 			void SetDesignFreq(int Freq);
 
+			void DFECompile(Network* Net, int** BurstMult, int** ForwParallelism, int** BackParallelism);
+
 			double* CNNForwardDFE(Network Net, double*** input);
 
 #endif

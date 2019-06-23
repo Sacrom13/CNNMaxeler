@@ -553,8 +553,8 @@
 					if(((CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1] - FilterSize) % Stride) != 0)
 					{
 						printf("Layer %d in Block %d has invalid Dimensions.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize + 1, CurrentNet->TotalBlocks + 1);
-						printf("InDims = (%dx%d), FilterSize = %d, Stride = %d.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize - 1][1], CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize - 1][1], FilterSize, Stride);
-						printf("InDims - PoolSize = %d is not divisible by Stride.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize - 1][1] - FilterSize);
+						printf("InDims = (%dx%d), FilterSize = %d, Stride = %d.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1], CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1], FilterSize, Stride);
+						printf("InDims - PoolSize = %d is not divisible by Stride.\n", CurrentNet->Blocks[CurrentNet->TotalBlocks].Dims[CurrentNet->Blocks[CurrentNet->TotalBlocks].BlockSize][1] - FilterSize);
 						exit(CNNConstructionError);
 					}
 

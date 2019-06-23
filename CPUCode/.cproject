@@ -35,7 +35,6 @@
 								<option id="gnu.c.compiler.exe.debug.option.debugging.level.491361493" name="Debug Level" superClass="gnu.c.compiler.exe.debug.option.debugging.level" value="gnu.c.debugging.level.max" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.include.paths.1778479499" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="/opt/maxcompiler/include/slic"/>
-									<listOptionValue builtIn="false" value="/home/specs/Afonso/Project/CNNMaxeler/RunRules/Simulation/include"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.750495383" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>

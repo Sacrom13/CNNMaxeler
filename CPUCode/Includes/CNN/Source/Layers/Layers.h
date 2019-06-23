@@ -27,10 +27,13 @@
 			#define MaxPool 1
 			#define MeanPool 2
 
+	// 3 --- Overflow Control --- //
 
-	// 3 --- Function Prototypes --- //
+			#define MaxValue 1000
 
-		// 3.1 --- Conv --- //
+	// 4 --- Function Prototypes --- //
+
+		// 4.1 --- Conv --- //
 
 			void ConvForwCpu(double*** Input, int* InDims,           // Input
 		                     double*** Output,                       // Output
@@ -42,7 +45,7 @@
 		                     double**** Filters, double* Params,                      	// Weights + Params
 		                     double LearningRate);                                    	// Learning Rate
 
-		// 3.2 --- Fcon --- //
+		// 4.2 --- Fcon --- //
 
 			void FconForwCpu(double* Input, int InDim, 				// Input
 							 double* Output, int OutDim, 			// Output
@@ -55,7 +58,7 @@
 							 double** Weights, double* Params, 							// Weights + Params
 							 double LearningRate);										// Learning Rate
 
-		// 3.3 --- Pool --- //
+		// 4.3 --- Pool --- //
 
 			void PoolForwCpu(double*** Input, int* InDims,           // Input
 	                         double*** Mask,                         // Mask to fill up

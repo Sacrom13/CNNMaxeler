@@ -1,0 +1,343 @@
+package blocks;
+
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+
+import cnn.CNNManager;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+
+public class Block1
+{
+	// 1 --- Global variables --- //
+
+		// 1.1 --- Block file with layers --- //
+
+			private final static String Filename = "layers1.txt";
+
+		// 1.2 --- IDs --- //
+
+			// 1.2.1 --- Layers --- //
+
+				private static final int Conv = 1;
+				private static final int Pool = 2;
+				private static final int Fcon = 3;
+
+		// 1.3 --- Manager Design Params --- //
+
+			private static int DesignFreq;				// Design Freq (MHz)
+			private static int LMemFreq;				// LMem Access Freq (MHz)
+
+		// 1.4 --- Kernel Design Params --- //
+
+			private static boolean ForwardFlag;			// True - Forward Propagation, False - Backward Propagation
+
+			private static int[] Layers;				// Layer Types
+			private static int[][] Dims;				// Layer Dims [0] - Channels , [1] - Size
+			private static double[][] Params;			// Layer Params
+			private static int[] Parallelism;			// Layer Parallelism. 1 means BurstSize outputs are calculated at once. N means N*BurstSize outputs are calculated at once
+
+			private static int[] BurstMult;				// DFE Burst Multiplier
+
+			private static int[] Padding;				// Amount of LMEM Padding input of each Layer has
+
+			private static int WeightDims;				// Size Weight array will have
+
+		// 1.5 --- Max Sizes --- //
+
+			private static final int MaxBlockSize = 20;		// Max Amount of Layers in a Block
+			private static final int MaxParams = 5;			// Max Params a Layer can Have
+
+		// 1.6 --- Mem Control --- //
+
+
+			private static final CPUTypes DataType = CPUTypes.DOUBLE;									// Data Type used for IO
+
+			private static final int BurstSizeBytes = 192;												// Burst Size in Bytes, implicit for Galava DFE
+			private static final int BurstSizeDataType = BurstSizeBytes/DataType.sizeInBytes(); 		// Burst Size in Doubles
+
+
+	// 2 --- File Readers --- //
+
+		// 2.1 --- Manager Design --- //
+
+			private static void ReadDFEParams()
+			{
+				BufferedReader br;
+				try
+				{
+					br = new BufferedReader(new FileReader("params.txt"));
+					String[] Aux = br.readLine().split(" ");
+				    LMemFreq = Integer.parseInt(Aux[0]);
+				    DesignFreq = Integer.parseInt(Aux[1]);
+				}
+				catch (FileNotFoundException e1)
+				{
+
+				}
+				catch (IOException e)
+				{
+
+				}
+			}
+
+		// 2.1 --- Read Block File --- //
+
+			private static void ReadParams(String Filename)
+			{
+				try
+				{
+					// Read Layer File
+					BufferedReader br;											// Reader to the File
+					br = new BufferedReader(new FileReader(Filename));		// Open Layer File
+					String Line;												// Read Line
+					String Aux[];												// Split the Line into all the values
+
+					// Auxiliary Variables to read, so we can later
+					// Call .length and get Correct Results with Real Variables
+					int[] LayersAux = new int[MaxBlockSize];
+					int[][] DimsAux = new int[MaxBlockSize][2];
+					float[][] ParamsAux = new float[MaxBlockSize][MaxParams];
+					int[] ParallelismAux = new int[MaxBlockSize];
+					int[] BurstMultAux = new int[MaxBlockSize];
+
+					// Count number of Layers
+					int LayerCount = 0;
+
+				    while ((Line = br.readLine()) != null)
+				    {
+				    	Aux = Line.split(" ");
+				    	LayersAux[LayerCount] = Integer.parseInt(Aux[0]);			// First Value is Layer Type
+				    	ParallelismAux[LayerCount] = Integer.parseInt(Aux[1]);		// Second Value is Parallelism
+				    	BurstMultAux[LayerCount] = Integer.parseInt(Aux[2]);		// Burst Multiplier
+
+				    	int i = 0;
+				    	switch(LayersAux[LayerCount])
+				    	{
+				    		case 0:		// Block Output Dims
+				    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[1]);				// Channels
+				    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[2]);				// X and Y
+
+				    				// Forward or Backward
+				    				if(Integer.parseInt(Aux[3]) == 1)
+				    				{
+				    					ForwardFlag = true;
+				    				}
+				    				else
+				    				{
+				    					ForwardFlag = false;
+				    				}
+
+				    				break;
+
+				    		case Conv:
+				    				// Get Layer Params
+				    				for(i = 0; i < 5; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 3]);
+				    				}
+
+				    				// Input Dims for this Layer
+				    				DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+3]);
+				    				DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+4]);
+
+				    				break;
+
+				    		case Pool:
+
+				    				// Get Layer Params
+					    			for(i = 0; i < 4; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 3]);
+				    				}
+					    			// Input Dims for this Layer
+									DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+3]);
+									DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+4]);
+
+			    					break;
+
+				    		case Fcon:
+
+				    				// Get Layer Params
+					    			for(i = 0; i < 1; ++i)
+				    				{
+				    					ParamsAux[LayerCount][i] = Float.parseFloat(Aux[i + 3]);
+				    				}
+
+					    			// Input Dims for this Layer
+					    			DimsAux[LayerCount][0] = Integer.parseInt(Aux[i+3]);
+					    			DimsAux[LayerCount][1] = Integer.parseInt(Aux[i+4]);
+			    					break;
+				    	}
+				    	LayerCount++;		// Count Number of Layers
+
+				    }
+
+				    // Init in Proper Variables, now that we know layercount
+
+						Layers = new int[LayerCount - 1];
+						Dims = new int[LayerCount][2];
+					    Params = new double[LayerCount - 1][MaxParams];
+					    Parallelism = new int[LayerCount - 1];
+					    BurstMult = new int[LayerCount - 1];
+
+						Padding = new int[LayerCount];
+
+					// Setup First Dims
+
+					    Dims[0][0] = DimsAux[0][0];
+					    Dims[0][1] = DimsAux[0][1];
+
+				    // Calculate First Padding
+
+					    int TotalMemSize = (Dims[0][0] * Dims[0][1] * Dims[0][1]);
+				    	if(Dims[0][0] == 1)
+				    	{
+				    		TotalMemSize /= Dims[0][1];
+				    	}
+						if((TotalMemSize % (BurstMultAux[0] * BurstSizeDataType)) != 0)
+						{
+							Padding[0] = (BurstMultAux[0] * BurstSizeDataType) - (TotalMemSize % (BurstMultAux[0] * BurstSizeDataType));
+						}
+						else
+						{
+							Padding[0] = 0;
+						}
+
+					// Setup WeightDimensions
+						WeightDims = 0;
+						boolean FconFlag = false;
+						int WeightDimsMax = 0;
+
+				    // Cycle to Copy Params. layercount - 1 Because of the extra Output Layer (0), that only has Output Dims
+				    for(int i = 0; i < LayerCount - 1; i++)
+				    {
+				    	// Copy Layer Params
+					    	for(int j = 0; j < MaxParams; j++)
+					    	{
+					    		Params[i][j] = ParamsAux[i][j];
+					    	}
+
+				    	// Copy Dims
+					    	Dims[i + 1][0] = DimsAux[i + 1][0];
+					    	Dims[i + 1][1] = DimsAux[i + 1][1];
+
+				    	// Copy Layer Type, Parallelism, BurstMult
+					    	Layers[i] = LayersAux[i];
+					    	Parallelism[i] = ParallelismAux[i];
+					    	BurstMult[i] = BurstMultAux[i];
+
+				    	// Calculate WeightDims
+
+					    	switch(Layers[i])
+					    	{
+					    			case Conv:
+												WeightDims = (int)(2 * Dims[i][0] * Params[i][2] * Params[i][2]);
+							    				break;
+
+					    			case Pool :
+							    				break;
+
+					    			case Fcon:
+
+					    						if(FconFlag == false)
+					    						{
+						    						WeightDims += (int) Math.pow(BurstMult[i] * BurstSizeDataType, 2);
+					    						}
+					    						else
+					    						{
+					    							WeightDims = (int) (2 * Math.pow(BurstMult[i] * BurstSizeDataType, 2));
+					    						}
+							    				break;
+					    	}
+
+							if(WeightDims > WeightDimsMax)
+							{
+								WeightDimsMax = WeightDims;
+							}
+
+				    	// Calculate Padding
+
+					    	TotalMemSize = (Dims[i + 1][0] * Dims[i + 1][1] * Dims[i + 1][1]);
+					    	if(Dims[i + 1][0] == 1)
+					    	{
+					    		TotalMemSize /= Dims[i + 1][1];
+					    	}
+							if((TotalMemSize % (BurstMult[i] * BurstSizeDataType)) != 0)
+							{
+								Padding[i + 1] = ((BurstMult[i] * BurstSizeDataType) - (TotalMemSize % (BurstMult[i] * BurstSizeDataType)));
+							}
+							else
+							{
+								Padding[i + 1] = 0;
+							}
+				    }
+				    WeightDims = WeightDimsMax;
+				}
+				catch (FileNotFoundException e)
+				{
+
+				}
+				catch (IOException e)
+				{
+
+				}
+			}
+
+	// 3 --- Main --- //
+
+	public static void main(String[] args)
+	{
+		ReadDFEParams();
+
+		ReadParams(Filename);
+
+		CNNManager M = new CNNManager(new EngineParameters(args),
+									  Layers,
+									  Dims, Params,
+									  Parallelism, BurstMult, Padding,
+									  WeightDims);
+
+		// Kernel Configs
+
+			M.SetBuildParameters();
+
+			// Lmem Frequency
+			M.SetLMemFrequency();
+
+			// Kernel for Forward/ Backward Prop
+			if(ForwardFlag)
+			{
+				M.SetupForwardKernel();
+				M.createSlicInterface(M.RunForward());				// Run ForwardProp
+			}
+			else
+			{
+				M.SetupBackwardKernel();
+				M.createSlicInterface(M.RunBackward()); 			// Run Backprop
+			}
+
+			// Clock Frequency
+			M.SetClockFrequency(DesignFreq);
+
+
+		// Interface Configs
+
+			// Write
+			M.SetupLMemWrite();
+			M.createSlicInterface(M.InterfaceWrite());				// Write to LMem
+
+			// Read
+			M.SetupLMemRead();
+			M.createSlicInterface(M.InterfaceRead());				// Read to LMem
+
+			M.suppressDefaultSlicInterface();
+
+		// Build Manager.
+
+		M.build();
+	}
+}
